@@ -1,0 +1,21 @@
+{
+  "name": "MakeUp Manager",
+  "short_name": "MakeUp",
+  "description": "Sistema completo de gestão para maquiladoras profissionais",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FF6B9D",
+  "theme_color": "#FF6B9D",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png", 
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

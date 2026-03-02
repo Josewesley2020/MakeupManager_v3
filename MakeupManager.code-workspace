@@ -1,0 +1,20 @@
+{
+  "folders": [
+    {
+      "name": "MakeupManager - Projeto Principal",
+      "path": "C:/GitHub/MakeupManager"
+    }
+  ],
+  "settings": {
+    "files.autoSave": "afterDelay",
+    "typescript.preferences.quoteStyle": "single",
+    "editor.formatOnSave": true
+  },
+  "extensions": {
+    "recommendations": [
+      "bradlc.vscode-tailwindcss",
+      "ms-vscode.vscode-typescript-next",
+      "esbenp.prettier-vscode"
+    ]
+  }
+}

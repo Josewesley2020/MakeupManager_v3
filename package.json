@@ -1,0 +1,42 @@
+{
+  "name": "makeup-manager",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "node -e \"if(process.env.ALLOW_DEPLOY==='true'){require('child_process').spawnSync('npx',['gh-pages','-d','dist'],{stdio:'inherit'}); } else { console.error('Deployment blocked: set ALLOW_DEPLOY=true to allow deploy'); process.exit(1);}\"",
+    "deploy:force": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0",
+    "clsx": "^2.0.0",
+    "cors": "^2.8.5",
+    "date-fns": "^2.30.0",
+    "express": "^4.18.2",
+    "lucide-react": "^0.263.1",
+    "qrcode-terminal": "^0.12.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.45.4",
+    "tailwind-merge": "^2.0.0",
+    "whatsapp-web.js": "^1.34.1",
+    "zod": "^3.22.4",
+    "zustand": "^4.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.25",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "autoprefixer": "^10.4.14",
+    "gh-pages": "^6.3.0",
+    "postcss": "^8.4.27",
+    "tailwindcss": "^3.3.3",
+    "typescript": "^5.0.2",
+    "vite": "^4.5.5"
+  }
+}
