@@ -1,4 +1,4 @@
-# MakeupManager V2 - Project Roadmap
+# MakeupManager V3 - Project Roadmap
 
 ## 📋 Project Vision
 Transform MakeupManager from a single-user makeup artist tool into a multi-tenant SaaS platform supporting various beauty and service-based businesses with PWA capabilities, offline support, and subscription-based monetization.
@@ -6,6 +6,42 @@ Transform MakeupManager from a single-user makeup artist tool into a multi-tenan
 ---
 
 ## 🎯 Release Phases
+
+### ✅ Phase 0: Code Simplification (COMPLETED - Mar 2026)
+**Status:** Deployed ✓  
+**Duration:** 1 day  
+**Branch:** `main` (v3)
+
+#### Objectives
+- Remove unused features and dependencies
+- Reduce codebase complexity by 15-20%
+- Eliminate technical debt from abandoned features
+- Prepare foundation for future refactoring
+
+#### Completed Tasks
+- [x] Remove 11 unused NPM dependencies (react-hook-form, zod, zustand, lucide-react, date-fns, tailwind-merge, clsx, whatsapp-web.js, express, cors, qrcode-terminal)
+- [x] Delete WhatsApp Server automation (175 lines) - kept web-based links only
+- [x] Remove regional pricing feature (disabled, never used) - ~200 lines
+- [x] Remove PDF budget generation infrastructure (never implemented)
+- [x] Clean up Settings.tsx - removed unused states and functions
+- [x] Update Supabase types - removed service_regional_prices references
+- [x] Simplify WHATSAPP_README.md - focus on production solution only
+- [x] Delete unused files: whatsapp-server.cjs, start-whatsapp.bat, create-budgets-bucket.sql, create-budgets-bucket.cjs
+
+#### Impact Metrics
+- **Dependencies Removed:** 11 packages (~5-10MB bundle reduction)
+- **Code Removed:** ~600 lines from components + 4 files deleted
+- **Complexity Reduction:** 15-18% less code to maintain
+- **Bundle Size:** Expected reduction to ~400 kB (from 460 kB)
+- **Security:** Fewer dependencies = fewer potential vulnerabilities
+
+#### Technical Decisions
+- **Kept:** WhatsApp web links (wa.me) - simple, reliable, zero infrastructure
+- **Removed:** WhatsApp server automation - over-engineered for current needs
+- **Kept:** service_regional_prices table in database - to be removed in future migration
+- **Removed:** All regional pricing UI/logic - feature was disabled since v2
+
+---
 
 ### ✅ Phase 1: Critical Bug Fixes (COMPLETED - Dec 2025)
 **Status:** Deployed ✓  
