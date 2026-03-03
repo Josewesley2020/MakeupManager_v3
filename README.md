@@ -114,8 +114,30 @@ npm run preview    # Testar build localmente
 ## 📚 Documentação
 
 - [PROJECT_ROADMAP.md](PROJECT_ROADMAP.md) - Roadmap e histórico de versões
-- [WHATSAPP_README.md](WHATSAPP_README.md) - Integração WhatsApp
 - [database/](database/) - Schema e migrações SQL
+
+---
+
+## 📱 WhatsApp Integration
+
+**Solução ativa:** Links direto `wa.me` (sem servidor)
+
+```typescript
+// Abre WhatsApp com mensagem pré-preenchida
+const url = `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`
+```
+
+**Onde está:**
+- [PriceCalculator.tsx](src/components/PriceCalculator.tsx) - Envio de orçamentos
+- [AppointmentsPage.tsx](src/components/AppointmentsPage.tsx) - Lembretes automáticos (7 dias)
+- [WhatsAppButton.tsx](src/components/WhatsAppButton.tsx) - Componente reutilizável
+
+**Templates:**
+- 💰 Orçamentos com serviços e preços
+- 📅 Confirmação de agendamento
+- 🔔 Lembretes automáticos
+
+✅ **Vantagens:** Zero infraestrutura, 100% confiável, sem custos
 
 ---
 
