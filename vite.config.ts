@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: mode === 'development' ? '/' : '/MakeupManager_v2/',
+  base: mode === 'development' ? '/' : '/MakeupManager_v3/',
   server: {
     port: 3000,
     open: true
