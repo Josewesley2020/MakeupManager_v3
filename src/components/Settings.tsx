@@ -42,15 +42,8 @@ interface Service {
   category_id: string
 }
 
-interface ServiceRegionalPrice {
-  id: string
-  service_id: string
-  service_area_id: string
-  price: number
-}
-
 export function Settings({ user, onBack }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'areas' | 'services' | 'regional-prices'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'areas' | 'services'>('profile')
   const [loading, setLoading] = useState(false)
   
   // Profile state
@@ -93,26 +86,18 @@ export function Settings({ user, onBack }: SettingsProps) {
     duration_minutes: ''
   })
 
-  // Regional prices state
-  const [regionalPrices, setRegionalPrices] = useState<ServiceRegionalPrice[]>([])
-  const [selectedService, setSelectedService] = useState('')
-  const [selectedArea, setSelectedArea] = useState('')
-  const [regionalPrice, setRegionalPrice] = useState(0)
-
   // Editable string inputs for numeric fields — keep them as strings while editing so
   // the user can delete characters (empty string) without the component forcing 0.
   const [experienceYearsInput, setExperienceYearsInput] = useState<string>('')
   const [newAreaTravelFeeInput, setNewAreaTravelFeeInput] = useState<string>('')
   const [newServicePriceInput, setNewServicePriceInput] = useState<string>('')
   const [newServiceDurationInput, setNewServiceDurationInput] = useState<string>('60')
-  const [regionalPriceInput, setRegionalPriceInput] = useState<string>('')
 
   // Validation states
   const [experienceYearsValid, setExperienceYearsValid] = useState<boolean>(true)
   const [newAreaTravelFeeValid, setNewAreaTravelFeeValid] = useState<boolean>(true)
   const [newServicePriceValid, setNewServicePriceValid] = useState<boolean>(true)
   const [newServiceDurationValid, setNewServiceDurationValid] = useState<boolean>(true)
-  const [regionalPriceValid, setRegionalPriceValid] = useState<boolean>(true)
 
   // Edit service validation states
   const [editServicePriceValid, setEditServicePriceValid] = useState<boolean>(true)
@@ -334,11 +319,6 @@ export function Settings({ user, onBack }: SettingsProps) {
     }
   }
 
-  const addRegionalPrice = async () => {
-    // Função desabilitada - preços regionais foram removidos na V2
-    alert('⚠️ Preços regionais não estão mais disponíveis. Configure o preço base do serviço e a taxa de deslocamento da região.')
-  }
-
   const startEditingService = (service: Service) => {
     setEditingService(service.id)
     setEditServiceData({
@@ -409,10 +389,6 @@ export function Settings({ user, onBack }: SettingsProps) {
       console.log('Tentando remover serviço com ID:', id)
 
       // Verificar se o serviço está sendo usado em agendamentos FUTUROS
-  const removeRegionalPrice = async (id: string) => {
-    // Função desabilitada - preços regionais foram removidos na V2
-    alert('⚠️ Preços regionais não estão mais disponíveis na versão 2.')
-  }
       // Verificar se há agendamentos passados (apenas para informar ao usuário)
       const { data: pastAppointmentsUsingService, error: pastCheckError } = await supabase
         .from('appointment_services')

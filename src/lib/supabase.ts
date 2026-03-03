@@ -174,35 +174,6 @@ export type Database = {
           updated_at?: string
         }
       }
-      service_regional_prices: {
-        Row: {
-          id: string
-          user_id: string
-          service_id: string
-          service_area_id: string
-          price: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          service_id: string
-          service_area_id: string
-          price: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          service_id?: string
-          service_area_id?: string
-          price?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
       appointments: {
         Row: {
           id: string
