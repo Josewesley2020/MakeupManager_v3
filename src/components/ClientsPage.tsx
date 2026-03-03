@@ -1,4 +1,3 @@
-import React from 'react'
 import Clients from './Clients'
 import ErrorBoundary from './ErrorBoundary'
 import { Container } from './Container'

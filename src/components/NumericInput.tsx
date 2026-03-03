@@ -1,5 +1,3 @@
-import React from 'react'
-
 interface NumericInputProps {
   id?: string
   value: string
