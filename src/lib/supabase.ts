@@ -1,23 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 
 // ============================================
-// CONFIGURAÇÃO SUPABASE V2
+// CONFIGURAÇÃO SUPABASE V3
 // ============================================
-// Em desenvolvimento: usar variáveis de ambiente (.env.local)
-// Em produção (GitHub Pages): usar valores fixos
+// Variáveis de ambiente obrigatórias
+// Desenvolvimento: .env local
+// Produção: GitHub Secrets (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
 
-const isDevelopment = import.meta.env.MODE === 'development'
-
-const supabaseUrl = isDevelopment 
-  ? import.meta.env.VITE_SUPABASE_URL 
-  : (import.meta.env.VITE_SUPABASE_URL || 'https://criawfiupggpgmxljndc.supabase.co')
-
-const supabaseAnonKey = isDevelopment
-  ? import.meta.env.VITE_SUPABASE_ANON_KEY
-  : (import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyaWF3Zml1cGdncGdteGxqbmRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MjU1NjAsImV4cCI6MjA4MDIwMTU2MH0.DY7q4QwEUx45_memx0jxDwLj72oe5ZNGFoiu6UEDHEY')
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Debug (apenas em desenvolvimento)
-if (isDevelopment) {
+if (import.meta.env.MODE === 'development') {
   console.log('🔧 Supabase Config (Dev):', {
     url: supabaseUrl,
     keyExists: !!supabaseAnonKey,
