@@ -97,177 +97,114 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
 
     setLoading(true)
     try {
-      // Calcular datas
-      const now = new Date()
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const weekAgo = new Date(today)
-      weekAgo.setDate(weekAgo.getDate() - 7)
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
 
-      // Buscar todos os agendamentos
-      const { data: appointments, error } = await supabase
-        .from('appointments')
-        .select(`
-          id,
-          scheduled_date,
-          scheduled_time,
-          status,
-          payment_status,
-          payment_total_appointment,
-          total_amount_paid,
-          is_custom_price,
-          clients!inner (
-            name,
-            phone
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('scheduled_date', { ascending: false })
-
-      if (error) throw error
-
-      const allAppointments = appointments || []
-
-      // Calcular métricas
-      let totalReceivable = 0
-      let totalReceived = 0
-      let monthReceivable = 0
-      let monthReceived = 0
-      let weekReceivable = 0
-      let weekReceived = 0
-      let todayReceivable = 0
-      let todayReceived = 0
-      let overdueAmount = 0
-      let customPriceCount = 0
-      let totalCompletedValue = 0
-      let completedCount = 0
-
-      const pendingList: AppointmentDetail[] = []
-      const overdueList: AppointmentDetail[] = []
-
-      const statusCount = { pending: 0, confirmed: 0, completed: 0, cancelled: 0 }
-      const paymentCount = { pending: 0, paid: 0, partial: 0 }
-
-      allAppointments.forEach((apt: any) => {
-        const appointmentDate = new Date(apt.scheduled_date + 'T00:00:00')
-        const totalValue = apt.payment_total_appointment || 0
-        const paidValue = apt.total_amount_paid || 0
-        const pendingValue = totalValue - paidValue
-        const isOverdue = appointmentDate < today && (apt.status === 'confirmed' || apt.status === 'pending')
+      // ✅ OTIMIZAÇÃO: 1 RPC + 2 queries leves ao invés de 1 query gigante + loop
+      const [metricsResult, pendingResult, overdueResult] = await Promise.all([
+        // RPC: Métricas agregadas consolidadas (1 table scan com FILTER clauses)
+        supabase.rpc('get_financial_metrics', { p_user_id: user.id }),
         
-        // Acessar dados do cliente corretamente
-        const clientData = Array.isArray(apt.clients) ? apt.clients[0] : apt.clients
-
-        // Contadores de status
-        statusCount[apt.status as keyof typeof statusCount]++
+        // Query leve: Apenas agendamentos pendentes futuros (TOP 50)
+        supabase
+          .from('appointments')
+          .select(`
+            id,
+            scheduled_date,
+            scheduled_time,
+            status,
+            payment_status,
+            payment_total_appointment,
+            total_amount_paid,
+            is_custom_price,
+            clients!inner (name, phone)
+          `)
+          .eq('user_id', user.id)
+          .eq('status', 'confirmed')
+          .gte('scheduled_date', today)
+          .neq('payment_status', 'paid')
+          .order('scheduled_date', { ascending: true })
+          .limit(50),
         
-        // Contadores de pagamento
-        if (apt.payment_status === 'paid') {
-          paymentCount.paid++
-        } else if (paidValue > 0 && paidValue < totalValue) {
-          paymentCount.partial++
-        } else {
-          paymentCount.pending++
-        }
+        // Query leve: Apenas agendamentos atrasados (TOP 50)
+        supabase
+          .from('appointments')
+          .select(`
+            id,
+            scheduled_date,
+            scheduled_time,
+            status,
+            payment_status,
+            payment_total_appointment,
+            total_amount_paid,
+            is_custom_price,
+            clients!inner (name, phone)
+          `)
+          .eq('user_id', user.id)
+          .eq('status', 'confirmed')
+          .lt('scheduled_date', today)
+          .neq('payment_status', 'paid')
+          .order('scheduled_date', { ascending: false })
+          .limit(50)
+      ])
 
-        // Valores personalizados
-        if (apt.is_custom_price) customPriceCount++
+      // Validar resultados
+      if (metricsResult.error) throw metricsResult.error
+      if (pendingResult.error) throw pendingResult.error
+      if (overdueResult.error) throw overdueResult.error
 
-        // Apenas considerar agendamentos confirmados ou concluídos (não cancelados e não pendentes)
-        if (apt.status !== 'cancelled' && apt.status !== 'pending') {
-          // Total geral
-          totalReceived += paidValue
-          if (pendingValue > 0) {
-            totalReceivable += pendingValue
-          }
+      const metrics = metricsResult.data || {}
 
-          // Mês atual
-          if (appointmentDate >= monthStart) {
-            monthReceived += paidValue
-            if (pendingValue > 0) monthReceivable += pendingValue
-          }
-
-          // Última semana
-          if (appointmentDate >= weekAgo) {
-            weekReceived += paidValue
-            if (pendingValue > 0) weekReceivable += pendingValue
-          }
-
-          // Hoje
-          if (appointmentDate.toDateString() === today.toDateString()) {
-            todayReceived += paidValue
-            if (pendingValue > 0) todayReceivable += pendingValue
-          }
-
-          // Atrasados (apenas confirmados que estão atrasados)
-          if (isOverdue && pendingValue > 0 && apt.status === 'confirmed') {
-            overdueAmount += pendingValue
-            overdueList.push({
-              id: apt.id,
-              scheduled_date: apt.scheduled_date,
-              scheduled_time: apt.scheduled_time,
-              status: apt.status,
-              payment_status: apt.payment_status,
-              payment_total_appointment: totalValue,
-              total_amount_paid: paidValue,
-              is_custom_price: apt.is_custom_price || false,
-              client: {
-                name: clientData?.name || 'Cliente não informado',
-                phone: clientData?.phone
-              }
-            })
-          }
-
-          // Pendentes (futuros ou atuais - apenas confirmados)
-          if (!isOverdue && pendingValue > 0 && apt.status === 'confirmed') {
-            pendingList.push({
-              id: apt.id,
-              scheduled_date: apt.scheduled_date,
-              scheduled_time: apt.scheduled_time,
-              status: apt.status,
-              payment_status: apt.payment_status,
-              payment_total_appointment: totalValue,
-              total_amount_paid: paidValue,
-              is_custom_price: apt.is_custom_price || false,
-              client: {
-                name: clientData?.name || 'Cliente não informado',
-                phone: clientData?.phone
-              }
-            })
-          }
-
-          // Ticket médio (apenas completados)
-          if (apt.status === 'completed') {
-            totalCompletedValue += totalValue
-            completedCount++
-          }
-        }
-      })
-
-      const averageTicket = completedCount > 0 ? totalCompletedValue / completedCount : 0
-
+      // Mapear dados agregados da RPC
       setFinancialData({
-        totalReceivable,
-        totalReceived,
-        totalRevenue: totalReceived + totalReceivable,
-        monthReceivable,
-        monthReceived,
-        monthRevenue: monthReceived + monthReceivable,
-        weekReceivable,
-        weekReceived,
-        weekRevenue: weekReceived + weekReceivable,
-        todayReceivable,
-        todayReceived,
-        todayRevenue: todayReceived + todayReceivable,
-        overdueAmount,
-        customPriceCount,
-        averageTicket,
-        appointmentsByStatus: statusCount,
-        appointmentsByPayment: paymentCount
+        totalReceivable: metrics.total_receivable || 0,
+        totalReceived: metrics.total_received || 0,
+        totalRevenue: (metrics.total_received || 0) + (metrics.total_receivable || 0),
+        monthReceivable: metrics.month_receivable || 0,
+        monthReceived: metrics.month_received || 0,
+        monthRevenue: (metrics.month_received || 0) + (metrics.month_receivable || 0),
+        weekReceivable: metrics.week_receivable || 0,
+        weekReceived: metrics.week_received || 0,
+        weekRevenue: (metrics.week_received || 0) + (metrics.week_receivable || 0),
+        todayReceivable: metrics.today_receivable || 0,
+        todayReceived: metrics.today_received || 0,
+        todayRevenue: (metrics.today_received || 0) + (metrics.today_receivable || 0),
+        overdueAmount: metrics.overdue_amount || 0,
+        customPriceCount: metrics.custom_price_count || 0,
+        averageTicket: metrics.average_ticket || 0,
+        appointmentsByStatus: {
+          pending: metrics.pending_count || 0,
+          confirmed: metrics.confirmed_count || 0,
+          completed: metrics.completed_count || 0,
+          cancelled: metrics.cancelled_count || 0
+        },
+        appointmentsByPayment: {
+          pending: metrics.payment_pending_count || 0,
+          paid: metrics.payment_paid_count || 0,
+          partial: metrics.payment_partial_count || 0
+        }
       })
 
-      setPendingAppointments(pendingList)
-      setOverdueAppointments(overdueList)
+      // Mapear listas de detalhes (pending e overdue)
+      const mapAppointmentDetail = (apt: any): AppointmentDetail => {
+        const clientData = Array.isArray(apt.clients) ? apt.clients[0] : apt.clients
+        return {
+          id: apt.id,
+          scheduled_date: apt.scheduled_date,
+          scheduled_time: apt.scheduled_time,
+          status: apt.status,
+          payment_status: apt.payment_status,
+          payment_total_appointment: apt.payment_total_appointment,
+          total_amount_paid: apt.total_amount_paid,
+          is_custom_price: apt.is_custom_price || false,
+          client: {
+            name: clientData?.name || 'Cliente não informado',
+            phone: clientData?.phone
+          }
+        }
+      }
+
+      setPendingAppointments((pendingResult.data || []).map(mapAppointmentDetail))
+      setOverdueAppointments((overdueResult.data || []).map(mapAppointmentDetail))
 
     } catch (error) {
       console.error('Erro ao carregar dados financeiros:', error)
