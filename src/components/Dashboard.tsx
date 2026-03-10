@@ -197,7 +197,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
   if (currentView === 'calculator') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 py-4">
+      <div className="min-h-[90vh] bg-gradient-to-br from-pink-50 via-white to-purple-50 py-4">
         <Container className="space-y-4">
           <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-2xl shadow-xl">
             <div className="flex items-center justify-between">
@@ -261,7 +261,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${
+    <div className={`min-h-[96vh] transition-colors duration-300 ${
       darkMode 
         ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
         : 'bg-gradient-to-br from-pink-50 via-white to-purple-50'
