@@ -8,6 +8,8 @@ import ClientsPage from './ClientsPage'
 import AppointmentsPage from './AppointmentsPage'
 import CalendarPage from './CalendarPage'
 import FinancialDashboard from './FinancialDashboard'
+import { DashboardV2 } from './DashboardV2'
+import { Container } from './Container'
 
 interface DashboardProps {
   user: any
@@ -20,6 +22,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'calculator' | 'clients' | 'appointments' | 'calendar' | 'financial'>('dashboard')
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode')
+    return saved === 'true'
+  })
+  const [useV2, setUseV2] = useState(() => {
+    const saved = localStorage.getItem('dashboardV2')
     return saved === 'true'
   })
   
@@ -191,13 +197,24 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     setAppointmentFilters({ status: 'overdue', paymentStatus: null })
   }
 
+  const toggleDashboardVersion = () => {
+    const newVersion = !useV2
+    setUseV2(newVersion)
+    localStorage.setItem('dashboardV2', newVersion.toString())
+  }
+
+  // Se estiver usando V2 e na view dashboard, renderizar DashboardV2
+  if (useV2 && currentView === 'dashboard') {
+    return <DashboardV2 user={user} onLogout={onLogout} />
+  }
+
   if (currentView === 'settings') {
     return <Settings user={user} onBack={() => setCurrentView('dashboard')} />
   }
 
   if (currentView === 'calculator') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 py-4">
+      <div className="min-h-[90vh] bg-gradient-to-br from-pink-50 via-white to-purple-50 py-4">
         <Container className="space-y-4">
           <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-2xl shadow-xl">
             <div className="flex items-center justify-between">
@@ -261,7 +278,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${
+    <div className={`min-h-[94vh] transition-colors duration-300 ${
       darkMode 
         ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
         : 'bg-gradient-to-br from-pink-50 via-white to-purple-50'
@@ -301,6 +318,14 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
               </p>
             </div>
             <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleDashboardVersion}
+                className="flex items-center space-x-1.5 px-2 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-all backdrop-blur-sm border border-white/20"
+                title={useV2 ? 'Versão Clássica' : 'Nova Versão (Experimental)'}
+              >
+                <span className="text-base">{useV2 ? '📊' : '✨'}</span>
+                <span className="hidden xl:inline text-xs font-medium">{useV2 ? 'Clássico' : 'Nova UI'}</span>
+              </button>
               <button
                 onClick={toggleDarkMode}
                 className="flex items-center space-x-1.5 px-2 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-all backdrop-blur-sm border border-white/20"
@@ -402,7 +427,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             <div className={`text-xs font-semibold transition-colors ${
               darkMode ? 'text-gray-200 group-hover:text-white' : 'text-gray-700 group-hover:text-white'
             }`}>
-              Financeiro
+              Relatório
             </div>
           </button>
           
