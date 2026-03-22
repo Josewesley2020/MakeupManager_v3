@@ -67,7 +67,9 @@ BEGIN
     total_duration_minutes,
     whatsapp_sent,
     whatsapp_sent_at,
-    whatsapp_message
+    whatsapp_message,
+    partner_id,
+    commission_amount
   ) VALUES (
     p_user_id,
     v_client_id,
@@ -91,7 +93,9 @@ BEGIN
       WHEN (p_appointment_data->>'whatsapp_sent')::BOOLEAN THEN NOW()
       ELSE NULL
     END,
-    p_appointment_data->>'whatsapp_message'
+    p_appointment_data->>'whatsapp_message',
+    NULLIF((p_appointment_data->>'partner_id')::TEXT, '')::UUID,
+    COALESCE((p_appointment_data->>'commission_amount')::DECIMAL, 0)
   )
   RETURNING id INTO v_appointment_id;
 

@@ -216,6 +216,37 @@ export type Database = {
   }
 }
 
+// ============================================
+// TYPES FOR PARTNERS & COMMISSIONS
+// ============================================
+
+export interface Partner {
+  id: string
+  user_id: string
+  name: string
+  phone: string
+  notes?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PartnerInsert {
+  user_id: string
+  name: string
+  phone: string
+  notes?: string | null
+}
+
+export interface PartnerUpdate {
+  name?: string
+  phone?: string
+  notes?: string | null
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
 // Funções utilitárias
 export const formatDuration = (totalMinutes: number): string => {
   if (totalMinutes <= 0) return '0min'
