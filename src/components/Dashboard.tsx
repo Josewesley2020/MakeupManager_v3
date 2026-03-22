@@ -5,6 +5,7 @@ import { WhatsAppButton } from './WhatsAppButton'
 import { Settings } from './Settings'
 import { PriceCalculator } from './PriceCalculator'
 import ClientsPage from './ClientsPage'
+import PartnersPage from './PartnersPage'
 import AppointmentsPage from './AppointmentsPage'
 import CalendarPage from './CalendarPage'
 import FinancialDashboard from './FinancialDashboard'
@@ -19,7 +20,7 @@ interface DashboardProps {
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [message, setMessage] = useState('')
-  const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'calculator' | 'clients' | 'appointments' | 'calendar' | 'financial'>('dashboard')
+  const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'calculator' | 'clients' | 'partners' | 'appointments' | 'calendar' | 'financial'>('dashboard')
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode')
     return saved === 'true'
@@ -247,6 +248,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
   if (currentView === 'clients') {
     return <ClientsPage onBack={() => setCurrentView('dashboard')} user={user} />
+  }
+
+  if (currentView === 'partners') {
+    return <PartnersPage onBack={() => setCurrentView('dashboard')} user={user} />
   }
 
   if (currentView === 'appointments') {

@@ -3,6 +3,7 @@ import { supabase, formatDate } from '../lib/supabase'
 import { Settings } from './Settings'
 import { PriceCalculator } from './PriceCalculator'
 import ClientsPage from './ClientsPage'
+import PartnersPage from './PartnersPage'
 import AppointmentsPage from './AppointmentsPage'
 import CalendarPage from './CalendarPage'
 import FinancialDashboard from './FinancialDashboard'
@@ -13,7 +14,7 @@ interface DashboardV2Props {
 }
 
 export function DashboardV2({ user, onLogout }: DashboardV2Props) {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'calculator' | 'clients' | 'appointments' | 'calendar' | 'financial'>('dashboard')
+  const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'calculator' | 'clients' | 'partners' | 'appointments' | 'calendar' | 'financial'>('dashboard')
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode')
     return saved === 'true'
@@ -64,7 +65,6 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
   const handleLogout = async () => { await supabase.auth.signOut(); onLogout() }
   const navigateToPendingConfirmation = () => { setCurrentView('appointments'); setAppointmentFilters({ status: 'pending', paymentStatus: null }) }
   const navigateToOverdue = () => { setCurrentView('appointments'); setAppointmentFilters({ status: 'overdue', paymentStatus: null }) }
-  const handlePartnersClick = () => { alert('🤝 Funcionalidade "Parceiros" em breve!\n\nEm desenvolvimento para gerenciar colaboradores e fornecedores.') }
 
   const getMainServiceName = (appointment: any) => {
     if (!appointment.appointment_services || appointment.appointment_services.length === 0) return 'Serviço não especificado'
@@ -87,7 +87,8 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
   if (currentView === 'calculator') {
     return (
       <div className="min-h-[90vh] bg-gradient-to-br from-pink-50 via-white to-purple-50 py-4">
-        <div className="max-w-7xl mx-auto px-4 space-y-3">
+        <div className="max-w-7xl mx-auto">
+          <div className="px-4 space-y-3">
           <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-3 rounded-xl shadow-lg">
             <div className="flex items-center justify-between">
               <button onClick={() => setCurrentView('dashboard')} className="text-green-100 hover:text-white">← Voltar</button>
@@ -97,6 +98,7 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
           </div>
           <PriceCalculator user={user} initialDate={quickAppointmentData.date} initialTime={quickAppointmentData.time} initialStatus={quickAppointmentData.status}
             onBackToCalendar={() => { setQuickAppointmentData({}); setCurrentView('calendar') }} />
+          </div>
         </div>
       </div>
     )
@@ -107,14 +109,15 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
   if (currentView === 'calendar') return <CalendarPage onBack={() => setCurrentView('dashboard')} user={user} 
     onCreateAppointment={(date, time) => { setQuickAppointmentData({ date, time, status: 'confirmed' }); setCurrentView('calculator') }} />
   if (currentView === 'financial') return <FinancialDashboard onBack={() => setCurrentView('dashboard')} user={user} />
+  if (currentView === 'partners') return <PartnersPage onBack={() => setCurrentView('dashboard')} user={user} />
 
   // DASHBOARD V2 - COMPACTO
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-pink-50 via-white to-purple-50'}`}>
       {/* Header Compacto */}
       <div className={`sticky top-0 z-30 shadow-md ${darkMode ? 'bg-gradient-to-r from-gray-800 to-gray-900' : 'bg-gradient-to-r from-pink-500 to-purple-600'} text-white`}>
-        <div className="max-w-7xl mx-auto px-4 py-2">
-          <div className="flex justify-between items-center">
+        <div className="max-w-7xl mx-auto py-2">
+          <div className="flex justify-between items-center px-4">
             <div>
               <h1 className="text-base font-bold flex items-center">💄 <span className="ml-2">Dashboard V2</span></h1>
               <p className={`text-xs ${darkMode ? 'text-gray-300' : 'text-pink-100'}`}>Bem-vinda, <span className="font-semibold">{userName || user?.email?.split('@')[0]}</span>!</p>
@@ -128,7 +131,8 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-3 space-y-3">
+      <div className="max-w-7xl mx-auto py-3">
+        <div className="px-4 space-y-3">
         {/* ALERTAS - Borda Lateral */}
         <div className="grid md:grid-cols-2 gap-2">
           <button onClick={navigateToPendingConfirmation} disabled={loading}
@@ -257,11 +261,11 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
                   <span className={`flex-1 text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>Clientes</span>
                   <span className="text-gray-400 text-sm">→</span>
                 </button>
-                <button onClick={handlePartnersClick}
+                <button onClick={() => setCurrentView('partners')}
                   className={`w-full rounded-lg p-2.5 text-left flex items-center space-x-2 transition ${
                     darkMode ? 'bg-gray-800/50 hover:bg-gray-800 border border-gray-700' : 'bg-white hover:bg-gray-50 border border-gray-200'}`}>
                   <span className="text-xl">🤝</span>
-                  <span className={`flex-1 text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>Parceiros <span className="text-xs bg-yellow-400 text-yellow-900 px-1 py-0.5 rounded">breve</span></span>
+                  <span className={`flex-1 text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>Parceiros</span>
                   <span className="text-gray-400 text-sm">→</span>
                 </button>
                 <button onClick={() => setCurrentView('settings')}
@@ -294,6 +298,7 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
