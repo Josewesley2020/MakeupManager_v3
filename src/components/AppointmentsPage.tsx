@@ -25,9 +25,12 @@ interface Appointment {
   total_duration_minutes: number
   is_custom_price: boolean
   notes: string | null
+  partner_id: string | null
+  commission_amount: number
   client: any // Simplificar para any por enquanto
   service_area: any // Simplificar para any por enquanto
   appointment_services: any[] // Simplificar para any por enquanto
+  partner: any // Partner info
 }
 
 export default function AppointmentsPage({ user, onBack, initialFilter = 'all', initialPaymentFilter = 'all' }: AppointmentsPageProps) {
@@ -128,8 +131,11 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
           total_duration_minutes,
           is_custom_price,
           notes,
+          partner_id,
+          commission_amount,
           client:clients(id, name, phone),
           service_area:service_areas(id, name),
+          partner:partners(id, name, phone),
           appointment_services(
             quantity,
             unit_price,
@@ -612,6 +618,11 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                             <h3 className="font-semibold text-gray-900 text-base truncate">
                               {appointment.client?.name || 'Cliente não informado'}
                             </h3>
+                            {appointment.partner && (
+                              <span className="text-xs bg-gradient-to-r from-cyan-100 to-purple-100 text-cyan-700 px-2 py-0.5 rounded-lg font-medium flex-shrink-0 border border-cyan-200" title={`Atendimento por ${appointment.partner.name}`}>
+                                👥 {appointment.partner.name}
+                              </span>
+                            )}
                             {isAppointmentOverdue(appointment) && (
                               <span className="text-orange-500 text-sm animate-pulse flex-shrink-0" title="Agendamento atrasado - atualizar status">
                                 ⚠️
@@ -742,6 +753,42 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                           </div>
                         </div>
                       </div>
+
+                      {/* Informações de Parceiro e Comissão */}
+                      {appointment.partner && appointment.commission_amount > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-gray-700 mb-2 uppercase tracking-wide">👥 Parceiro:</div>
+                          <div className="space-y-2 p-3 bg-gradient-to-r from-cyan-50 to-purple-50 rounded-lg border border-cyan-200">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600 flex items-center">
+                                <span className="mr-2">👤</span>
+                                Atendido por:
+                              </span>
+                              <span className="text-cyan-700 font-semibold">
+                                {appointment.partner.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600 flex items-center">
+                                <span className="mr-2">💸</span>
+                                Repasse:
+                              </span>
+                              <span className="text-yellow-600 font-bold">
+                                R$ {appointment.commission_amount.toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm pt-2 border-t border-cyan-200">
+                              <span className="text-gray-700 font-semibold flex items-center">
+                                <span className="mr-2">✨</span>
+                                Seu Lucro:
+                              </span>
+                              <span className="text-green-600 font-bold">
+                                R$ {(appointment.payment_total_appointment - appointment.commission_amount).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Informações de Pagamento Detalhadas */}
                       {appointment.payment_total_appointment !== null && 

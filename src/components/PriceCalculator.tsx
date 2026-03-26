@@ -81,6 +81,11 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
   const [clientsLoading, setClientsLoading] = useState(false)
   const [clientsError, setClientsError] = useState<string | null>(null)
   
+  // Dados de parceiros
+  const [partners, setPartners] = useState<Array<{id:string,name:string,phone:string}>>([])
+  const [selectedPartner, setSelectedPartner] = useState('')
+  const [commissionAmount, setCommissionAmount] = useState('0')
+  
   // Cache do perfil do usuário (carregado uma vez)
   const [userProfile, setUserProfile] = useState<{full_name?: string, instagram?: string} | null>(null)
 
@@ -93,8 +98,8 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
       setClientsError(null)
       
       try {
-        // Carregar clientes E perfil em PARALELO (otimização)
-        const [clientsResult, profileResult] = await Promise.all([
+        // Carregar clientes, perfil E parceiros em PARALELO (otimização)
+        const [clientsResult, profileResult, partnersResult] = await Promise.all([
           supabase
             .from('clients')
             .select('id,name,phone,address,instagram')
@@ -105,7 +110,13 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
             .from('profiles')
             .select('full_name,instagram') // Apenas campos necessários
             .eq('id', user.id)
-            .single()
+            .single(),
+          
+          supabase
+            .from('partners')
+            .select('id,name,phone')
+            .eq('user_id', user.id)
+            .order('name', { ascending: true })
         ])
 
         if (mounted) {
@@ -121,6 +132,14 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
           
           if (profileResult.data) {
             setUserProfile(profileResult.data)
+          }
+          
+          if (partnersResult.data) {
+            setPartners(partnersResult.data.map((p: any) => ({ 
+              id: p.id, 
+              name: p.name, 
+              phone: p.phone 
+            })))
           }
           
           if (clientsResult.error) throw clientsResult.error
@@ -655,6 +674,8 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
             is_custom_price: useManualPrice,
             total_duration_minutes: totalDurationMinutes,
             whatsapp_sent: false,
+            partner_id: selectedPartner || null,
+            commission_amount: selectedPartner ? parseFloat(commissionAmount || '0') : 0,
             notes: useManualPrice ?
               `Valor diferenciado: R$ ${parseFloat(manualPrice.replace(',', '.')).toFixed(2)}` :
               `${calculatedPrices.services.length} serviço(s)`
@@ -810,6 +831,48 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
               placeholder="11987654321"
             />
           </div>
+        </div>
+
+        {/* Seleção de Parceiro e Comissão */}
+        <div className="space-y-3 p-3 bg-gradient-to-r from-cyan-50 to-purple-50 rounded-lg border border-cyan-200">
+          <div>
+            <label className="block text-sm font-medium text-cyan-800 mb-2">
+              👥 Quem vai atender?
+            </label>
+            <select
+              value={selectedPartner}
+              onChange={(e) => {
+                setSelectedPartner(e.target.value)
+                if (!e.target.value) setCommissionAmount('0')
+              }}
+              className="w-full px-3 py-2 border border-cyan-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            >
+              <option value="">Eu mesmo(a)</option>
+              {partners.map((partner) => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {selectedPartner && (
+            <div>
+              <label className="block text-sm font-medium text-purple-800 mb-2">
+                💰 Valor do Repasse (Comissão)
+              </label>
+              <NumericInput
+                value={commissionAmount}
+                onChange={setCommissionAmount}
+                placeholder="0.00"
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                decimalPlaces={2}
+                formatCurrency={true}
+                currency="BRL"
+                locale="pt-BR"
+              />
+            </div>
+          )}
         </div>
 
         {/* Seleção de Região */}
@@ -1499,6 +1562,27 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                       const travelFee = includeTravelFee && area ? area.travel_fee : 0
                       return (servicesTotal + travelFee).toFixed(2)
                     })()}`}</div>
+                    {selectedPartner && (
+                      <>
+                        <div className="text-yellow-700">
+                          <strong>👥 Parceiro:</strong> {partners.find(p => p.id === selectedPartner)?.name}
+                        </div>
+                        <div className="text-yellow-700">
+                          <strong>💸 Repasse:</strong> R$ {parseFloat(commissionAmount || '0').toFixed(2)}
+                        </div>
+                        <div className="text-green-700 font-semibold">
+                          <strong>✨ Seu Lucro:</strong> R$ {(() => {
+                            const totalValue = useManualPrice && manualPrice ? parseFloat(manualPrice.replace(',', '.')) : (() => {
+                              const servicesTotal = calculatedPrices.services.reduce((sum, service) => sum + service.totalPrice, 0)
+                              const area = areas.find(a => a.id === selectedArea)
+                              const travelFee = includeTravelFee && area ? area.travel_fee : 0
+                              return servicesTotal + travelFee
+                            })()
+                            return (totalValue - parseFloat(commissionAmount || '0')).toFixed(2)
+                          })()}
+                        </div>
+                      </>
+                    )}
                     {!useManualPrice && (
                       <div><strong>⏱️ Tempo Estimado:</strong> {formatDuration(calculatedPrices.services.reduce((total, service) => {
                         const serviceInfo = services.find(s => s.id === service.serviceId)

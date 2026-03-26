@@ -13,7 +13,27 @@ interface FinancialData {
   totalReceived: number // Total já recebido
   totalRevenue: number // Receita total (recebido + a receber)
   
-  // Por Período
+  // Valores Brutos e Líquidos
+  totalGrossRevenue: number // Receita bruta (total cobrado de clientes)
+  totalCommissions: number // Total de comissões pagas
+  totalNetProfit: number // Lucro líquido (bruto - comissões)
+  
+  // Por Período - Bruto
+  monthGrossRevenue: number
+  weekGrossRevenue: number
+  todayGrossRevenue: number
+  
+  // Por Período - Comissões
+  monthCommissions: number
+  weekCommissions: number
+  todayCommissions: number
+  
+  // Por Período - Lucro Líquido
+  monthNetProfit: number
+  weekNetProfit: number
+  todayNetProfit: number
+  
+  // Por Período - Recebimento
   monthReceivable: number
   monthReceived: number
   monthRevenue: number
@@ -67,6 +87,18 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
     totalReceivable: 0,
     totalReceived: 0,
     totalRevenue: 0,
+    totalGrossRevenue: 0,
+    totalCommissions: 0,
+    totalNetProfit: 0,
+    monthGrossRevenue: 0,
+    weekGrossRevenue: 0,
+    todayGrossRevenue: 0,
+    monthCommissions: 0,
+    weekCommissions: 0,
+    todayCommissions: 0,
+    monthNetProfit: 0,
+    weekNetProfit: 0,
+    todayNetProfit: 0,
     monthReceivable: 0,
     monthReceived: 0,
     monthRevenue: 0,
@@ -101,8 +133,8 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
 
       // ✅ OTIMIZAÇÃO: 1 RPC + 2 queries leves ao invés de 1 query gigante + loop
       const [metricsResult, pendingResult, overdueResult] = await Promise.all([
-        // RPC: Métricas agregadas consolidadas (1 table scan com FILTER clauses)
-        supabase.rpc('get_financial_metrics', { p_user_id: user.id }),
+        // RPC: Métricas agregadas consolidadas incluindo comissões (1 table scan com FILTER clauses)
+        supabase.rpc('get_commission_metrics', { p_user_id: user.id }),
         
         // Query leve: Apenas agendamentos pendentes futuros (TOP 50)
         supabase
@@ -159,6 +191,18 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
         totalReceivable: metrics.total_receivable || 0,
         totalReceived: metrics.total_received || 0,
         totalRevenue: (metrics.total_received || 0) + (metrics.total_receivable || 0),
+        totalGrossRevenue: metrics.total_gross_revenue || 0,
+        totalCommissions: metrics.total_commissions || 0,
+        totalNetProfit: metrics.total_net_profit || 0,
+        monthGrossRevenue: metrics.month_gross_revenue || 0,
+        weekGrossRevenue: metrics.week_gross_revenue || 0,
+        todayGrossRevenue: metrics.today_gross_revenue || 0,
+        monthCommissions: metrics.month_commissions || 0,
+        weekCommissions: metrics.week_commissions || 0,
+        todayCommissions: metrics.today_commissions || 0,
+        monthNetProfit: metrics.month_net_profit || 0,
+        weekNetProfit: metrics.week_net_profit || 0,
+        todayNetProfit: metrics.today_net_profit || 0,
         monthReceivable: metrics.month_receivable || 0,
         monthReceived: metrics.month_received || 0,
         monthRevenue: (metrics.month_received || 0) + (metrics.month_receivable || 0),
@@ -230,26 +274,38 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
         return {
           receivable: financialData.todayReceivable,
           received: financialData.todayReceived,
-          revenue: financialData.todayRevenue
+          revenue: financialData.todayRevenue,
+          grossRevenue: financialData.todayGrossRevenue,
+          commissions: financialData.todayCommissions,
+          netProfit: financialData.todayNetProfit
         }
       case 'week':
         return {
           receivable: financialData.weekReceivable,
           received: financialData.weekReceived,
-          revenue: financialData.weekRevenue
+          revenue: financialData.weekRevenue,
+          grossRevenue: financialData.weekGrossRevenue,
+          commissions: financialData.weekCommissions,
+          netProfit: financialData.weekNetProfit
         }
       case 'month':
         return {
           receivable: financialData.monthReceivable,
           received: financialData.monthReceived,
-          revenue: financialData.monthRevenue
+          revenue: financialData.monthRevenue,
+          grossRevenue: financialData.monthGrossRevenue,
+          commissions: financialData.monthCommissions,
+          netProfit: financialData.monthNetProfit
         }
       case 'all':
       default:
         return {
           receivable: financialData.totalReceivable,
           received: financialData.totalReceived,
-          revenue: financialData.totalRevenue
+          revenue: financialData.totalRevenue,
+          grossRevenue: financialData.totalGrossRevenue,
+          commissions: financialData.totalCommissions,
+          netProfit: financialData.totalNetProfit
         }
     }
   }
@@ -343,28 +399,75 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
 
         {/* Cards Principais */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          {/* Receita Total */}
+          {/* Receita Bruta */}
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white p-4 sm:p-6 rounded-2xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm sm:text-base font-semibold truncate">💵 Receita Total</h3>
+              <h3 className="text-sm sm:text-base font-semibold truncate">💵 Receita Bruta</h3>
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-xl sm:text-2xl">📊</span>
               </div>
             </div>
-            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.revenue)}</p>
-            <p className="text-blue-100 text-xs">Recebido + A Receber</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.grossRevenue)}</p>
+            <p className="text-blue-100 text-xs">Total cobrado de clientes</p>
           </div>
 
-          {/* Já Recebido */}
+          {/* Comissões */}
+          <div className="bg-gradient-to-br from-yellow-500 to-amber-600 text-white p-4 sm:p-6 rounded-2xl shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm sm:text-base font-semibold truncate">💸 Repasses</h3>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-xl sm:text-2xl">👥</span>
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.commissions)}</p>
+            <p className="text-yellow-100 text-xs">
+              {periodData.grossRevenue > 0 
+                ? `${((periodData.commissions / periodData.grossRevenue) * 100).toFixed(1)}% do bruto`
+                : 'Sem repasses'}
+            </p>
+          </div>
+
+          {/* Lucro Líquido */}
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white p-4 sm:p-6 rounded-2xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm sm:text-base font-semibold truncate">✅ Já Recebido</h3>
+              <h3 className="text-sm sm:text-base font-semibold truncate">✨ Lucro Líquido</h3>
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-xl sm:text-2xl">💰</span>
               </div>
             </div>
-            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.received)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.netProfit)}</p>
             <p className="text-green-100 text-xs">
+              {periodData.grossRevenue > 0 
+                ? `${((periodData.netProfit / periodData.grossRevenue) * 100).toFixed(1)}% do bruto`
+                : 'Sem lucro'}
+            </p>
+          </div>
+        </div>
+
+        {/* Cards de Recebimento */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          {/* Receita Total */}
+          <div className="bg-gradient-to-br from-purple-500 to-pink-600 text-white p-4 sm:p-6 rounded-2xl shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm sm:text-base font-semibold truncate">💵 Receita Total</h3>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-xl sm:text-2xl">📋</span>
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.revenue)}</p>
+            <p className="text-purple-100 text-xs">Recebido + A Receber</p>
+          </div>
+
+          {/* Já Recebido */}
+          <div className="bg-gradient-to-br from-teal-500 to-cyan-600 text-white p-4 sm:p-6 rounded-2xl shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm sm:text-base font-semibold truncate">✅ Já Recebido</h3>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-xl sm:text-2xl">💳</span>
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.received)}</p>
+            <p className="text-teal-100 text-xs">
               {periodData.revenue > 0 
                 ? `${((periodData.received / periodData.revenue) * 100).toFixed(1)}% do total`
                 : 'Nenhuma receita'}
@@ -376,7 +479,7 @@ export default function FinancialDashboard({ user, onBack }: FinancialDashboardP
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm sm:text-base font-semibold truncate">⏳ A Receber</h3>
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-xl sm:text-2xl">💳</span>
+                <span className="text-xl sm:text-2xl">⏰</span>
               </div>
             </div>
             <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1 sm:mb-2 break-words">{formatCurrency(periodData.receivable)}</p>
