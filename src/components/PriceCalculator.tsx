@@ -55,6 +55,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
 
   // Estados de pagamento
   const [downPaymentAmount, setDownPaymentAmount] = useState('0')
+  const [downPaymentPercentage, setDownPaymentPercentage] = useState(30) // Porcentagem padrão da taxa de agendamento
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'partial'>('pending')
 
   // Controle de criação de agendamento
@@ -261,7 +262,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
     }
   }, [appointmentServices, selectedArea, services, areas, includeTravelFee])
 
-  // Definir automaticamente 30% do valor total quando confirmar agendamento
+  // Definir automaticamente a porcentagem configurada do valor total quando confirmar agendamento
   useEffect(() => {
     if (isAppointmentConfirmed && (calculatedPrices.services.length > 0 || (useManualPrice && manualPrice))) {
       const totalValue = useManualPrice && manualPrice ? 
@@ -270,10 +271,10 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
       const area = areas.find(a => a.id === selectedArea)
       const travelFee = includeTravelFee && area ? area.travel_fee : 0
       const finalTotal = useManualPrice && manualPrice ? totalValue : totalValue + travelFee
-      const thirtyPercent = (finalTotal * 0.3).toFixed(2)
-      setDownPaymentAmount(thirtyPercent)
+      const calculatedDownPayment = (finalTotal * (downPaymentPercentage / 100)).toFixed(2)
+      setDownPaymentAmount(calculatedDownPayment)
     }
-  }, [isAppointmentConfirmed, calculatedPrices, selectedArea, areas, includeTravelFee, useManualPrice, manualPrice])
+  }, [isAppointmentConfirmed, calculatedPrices, selectedArea, areas, includeTravelFee, useManualPrice, manualPrice, downPaymentPercentage])
 
   // Atualizar appointmentTime quando hora ou minuto mudam (usuário digitando)
   useEffect(() => {
@@ -1396,6 +1397,27 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                   <span className="mr-1 sm:mr-2">💳</span>
                   Informações de Pagamento
                 </label>
+
+                {/* Porcentagem da Taxa de Agendamento */}
+                <div className="mb-2 sm:mb-3">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                    📊 Taxa de Agendamento (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={downPaymentPercentage}
+                      onChange={(e) => setDownPaymentPercentage(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                      className="w-full px-3 sm:px-4 pr-8 py-2 sm:py-3 border-2 border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all duration-200 bg-white text-gray-900 text-sm font-medium"
+                      placeholder="30"
+                      step="5"
+                      min="0"
+                      max="100"
+                    />
+                    <span className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium text-sm">%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Porcentagem cobrada como entrada ao confirmar</p>
+                </div>
 
                 <div className="mb-2 sm:mb-3">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">

@@ -133,23 +133,48 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
           notes,
           partner_id,
           commission_amount,
-          client:clients(id, name, phone),
-          service_area:service_areas(id, name),
-          partner:partners(id, name, phone),
+          clients!inner(id, name, phone),
+          service_areas(id, name),
           appointment_services(
             quantity,
             unit_price,
             total_price,
-            service:services(id, name)
+            services(id, name)
           )
         `)
         .eq('user_id', user.id)
-        .order('scheduled_date', { ascending: true })
-        .order('scheduled_time', { ascending: true })
+        .order('scheduled_date', { ascending: false })
+        .order('scheduled_time', { ascending: false })
 
       if (error) throw error
+      
+      // Buscar dados de parceiros manualmente (workaround temporário)
+      const appointmentsWithPartners = await Promise.all(
+        (data || []).map(async (apt: any) => {
+          if (apt.partner_id) {
+            const { data: partnerData } = await supabase
+              .from('partners')
+              .select('id, name, phone')
+              .eq('id', apt.partner_id)
+              .single()
+            
+            return {
+              ...apt,
+              client: Array.isArray(apt.clients) ? apt.clients[0] : apt.clients,
+              service_area: Array.isArray(apt.service_areas) ? apt.service_areas[0] : apt.service_areas,
+              partner: partnerData
+            }
+          }
+          return {
+            ...apt,
+            client: Array.isArray(apt.clients) ? apt.clients[0] : apt.clients,
+            service_area: Array.isArray(apt.service_areas) ? apt.service_areas[0] : apt.service_areas,
+            partner: null
+          }
+        })
+      )
 
-      setAppointments(data || [])
+      setAppointments(appointmentsWithPartners || [])
     } catch (err: any) {
       console.error('Erro ao carregar agendamentos:', err)
       setError(err.message || 'Erro ao carregar agendamentos')
