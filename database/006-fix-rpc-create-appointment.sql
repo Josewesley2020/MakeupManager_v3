@@ -1,7 +1,7 @@
 -- =====================================================
--- RPC: create_appointment_with_services
--- Descrição: Cria agendamento com serviços em TRANSAÇÃO ATÔMICA
--- Elimina 3 operações sequenciais (client upsert + appointment + services)
+-- FIX: create_appointment_with_services
+-- Remove colunas que não existem na tabela appointments
+-- Execute este arquivo no Supabase SQL Editor
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION create_appointment_with_services(
@@ -46,7 +46,7 @@ BEGIN
     RETURNING id INTO v_client_id;
   END IF;
 
-  -- 2. Criar appointment (NOTA: partner_id e commission_amount serão adicionados após migração 011)
+  -- 2. Criar appointment (APENAS colunas que existem)
   INSERT INTO appointments (
     user_id,
     client_id,
@@ -81,10 +81,6 @@ BEGIN
     p_appointment_data->>'payment_status',
     (p_appointment_data->>'total_duration_minutes')::INTEGER,
     (p_appointment_data->>'whatsapp_sent')::BOOLEAN
-    -- APÓS EXECUTAR MIGRAÇÃO 011, ADICIONAR:
-    -- , partner_id, commission_amount
-    -- NULLIF((p_appointment_data->>'partner_id')::TEXT, '')::UUID,
-    -- COALESCE((p_appointment_data->>'commission_amount')::DECIMAL, 0)
   )
   RETURNING id INTO v_appointment_id;
 
@@ -126,4 +122,4 @@ $$;
 GRANT EXECUTE ON FUNCTION create_appointment_with_services(UUID, JSONB, JSONB, JSONB) TO authenticated;
 
 -- Comentário descritivo
-COMMENT ON FUNCTION create_appointment_with_services IS 'Cria agendamento completo (cliente + appointment + serviços) em transação atômica';
+COMMENT ON FUNCTION create_appointment_with_services IS 'Cria agendamento completo (cliente + appointment + serviços) em transação atômica - Versão sem campos de parceiro (aguardando migração 011)';

@@ -55,6 +55,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
 
   // Estados de pagamento
   const [downPaymentAmount, setDownPaymentAmount] = useState('0')
+  const [downPaymentPercentage, setDownPaymentPercentage] = useState(30) // Porcentagem padrão da taxa de agendamento
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'partial'>('pending')
 
   // Controle de criação de agendamento
@@ -81,6 +82,11 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
   const [clientsLoading, setClientsLoading] = useState(false)
   const [clientsError, setClientsError] = useState<string | null>(null)
   
+  // Dados de parceiros
+  const [partners, setPartners] = useState<Array<{id:string,name:string,phone:string}>>([])
+  const [selectedPartner, setSelectedPartner] = useState('')
+  const [commissionAmount, setCommissionAmount] = useState('0')
+  
   // Cache do perfil do usuário (carregado uma vez)
   const [userProfile, setUserProfile] = useState<{full_name?: string, instagram?: string} | null>(null)
 
@@ -93,8 +99,8 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
       setClientsError(null)
       
       try {
-        // Carregar clientes E perfil em PARALELO (otimização)
-        const [clientsResult, profileResult] = await Promise.all([
+        // Carregar clientes, perfil E parceiros em PARALELO (otimização)
+        const [clientsResult, profileResult, partnersResult] = await Promise.all([
           supabase
             .from('clients')
             .select('id,name,phone,address,instagram')
@@ -105,7 +111,13 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
             .from('profiles')
             .select('full_name,instagram') // Apenas campos necessários
             .eq('id', user.id)
-            .single()
+            .single(),
+          
+          supabase
+            .from('partners')
+            .select('id,name,phone')
+            .eq('user_id', user.id)
+            .order('name', { ascending: true })
         ])
 
         if (mounted) {
@@ -121,6 +133,14 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
           
           if (profileResult.data) {
             setUserProfile(profileResult.data)
+          }
+          
+          if (partnersResult.data) {
+            setPartners(partnersResult.data.map((p: any) => ({ 
+              id: p.id, 
+              name: p.name, 
+              phone: p.phone 
+            })))
           }
           
           if (clientsResult.error) throw clientsResult.error
@@ -242,7 +262,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
     }
   }, [appointmentServices, selectedArea, services, areas, includeTravelFee])
 
-  // Definir automaticamente 30% do valor total quando confirmar agendamento
+  // Definir automaticamente a porcentagem configurada do valor total quando confirmar agendamento
   useEffect(() => {
     if (isAppointmentConfirmed && (calculatedPrices.services.length > 0 || (useManualPrice && manualPrice))) {
       const totalValue = useManualPrice && manualPrice ? 
@@ -251,10 +271,10 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
       const area = areas.find(a => a.id === selectedArea)
       const travelFee = includeTravelFee && area ? area.travel_fee : 0
       const finalTotal = useManualPrice && manualPrice ? totalValue : totalValue + travelFee
-      const thirtyPercent = (finalTotal * 0.3).toFixed(2)
-      setDownPaymentAmount(thirtyPercent)
+      const calculatedDownPayment = (finalTotal * (downPaymentPercentage / 100)).toFixed(2)
+      setDownPaymentAmount(calculatedDownPayment)
     }
-  }, [isAppointmentConfirmed, calculatedPrices, selectedArea, areas, includeTravelFee, useManualPrice, manualPrice])
+  }, [isAppointmentConfirmed, calculatedPrices, selectedArea, areas, includeTravelFee, useManualPrice, manualPrice, downPaymentPercentage])
 
   // Atualizar appointmentTime quando hora ou minuto mudam (usuário digitando)
   useEffect(() => {
@@ -655,6 +675,8 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
             is_custom_price: useManualPrice,
             total_duration_minutes: totalDurationMinutes,
             whatsapp_sent: false,
+            partner_id: selectedPartner || null,
+            commission_amount: selectedPartner ? parseFloat(commissionAmount || '0') : 0,
             notes: useManualPrice ?
               `Valor diferenciado: R$ ${parseFloat(manualPrice.replace(',', '.')).toFixed(2)}` :
               `${calculatedPrices.services.length} serviço(s)`
@@ -708,7 +730,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1"
           >
             <span>←</span>
-            <span>Voltar ao Calendário</span>
+            <span>Calendário</span>
           </button>
         )}
       </div>
@@ -810,6 +832,48 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
               placeholder="11987654321"
             />
           </div>
+        </div>
+
+        {/* Seleção de Parceiro e Comissão */}
+        <div className="space-y-3 p-3 bg-gradient-to-r from-cyan-50 to-purple-50 rounded-lg border border-cyan-200">
+          <div>
+            <label className="block text-sm font-medium text-cyan-800 mb-2">
+              👥 Quem vai atender?
+            </label>
+            <select
+              value={selectedPartner}
+              onChange={(e) => {
+                setSelectedPartner(e.target.value)
+                if (!e.target.value) setCommissionAmount('0')
+              }}
+              className="w-full px-3 py-2 border border-cyan-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            >
+              <option value="">Eu mesmo(a)</option>
+              {partners.map((partner) => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {selectedPartner && (
+            <div>
+              <label className="block text-sm font-medium text-purple-800 mb-2">
+                💰 Valor do Repasse (Comissão)
+              </label>
+              <NumericInput
+                value={commissionAmount}
+                onChange={setCommissionAmount}
+                placeholder="0.00"
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                decimalPlaces={2}
+                formatCurrency={true}
+                currency="BRL"
+                locale="pt-BR"
+              />
+            </div>
+          )}
         </div>
 
         {/* Seleção de Região */}
@@ -1102,6 +1166,44 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                   </div>
                 )}
               </div>
+
+              {/* Configuração da Taxa de Agendamento */}
+              <div className="mt-4 bg-gradient-to-r from-yellow-50 to-orange-50 p-4 rounded-lg border border-yellow-200">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <span className="mr-2">📊</span>
+                  Taxa de Agendamento (% de entrada)
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      value={downPaymentPercentage}
+                      onChange={(e) => setDownPaymentPercentage(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                      className="w-full px-4 pr-10 py-3 border-2 border-yellow-300 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all duration-200 bg-white text-gray-900 font-semibold text-lg"
+                      placeholder="30"
+                      step="5"
+                      min="0"
+                      max="100"
+                    />
+                    <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-600 font-bold text-lg">%</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-600">Valor da entrada:</div>
+                    <div className="text-lg font-bold text-yellow-700">
+                      R$ {(() => {
+                        const servicesTotal = calculatedPrices.services.reduce((sum, service) => sum + service.totalPrice, 0)
+                        const area = areas.find(a => a.id === selectedArea)
+                        const travelFee = includeTravelFee && area ? area.travel_fee : 0
+                        const total = useManualPrice && manualPrice ? parseFloat(manualPrice.replace(',', '.')) : (servicesTotal + travelFee)
+                        return (total * (downPaymentPercentage / 100)).toFixed(2)
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  💡 Esta porcentagem será usada para calcular o valor de entrada ao criar o agendamento
+                </p>
+              </div>
             </div>
 
             {/* Indicadores */}
@@ -1334,6 +1436,25 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                   Informações de Pagamento
                 </label>
 
+                {/* Porcentagem da Taxa de Agendamento - SOMENTE LEITURA (editável apenas na calculadora) */}
+                <div className="mb-2 sm:mb-3">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                    📊 Taxa de Agendamento (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={downPaymentPercentage}
+                      readOnly
+                      disabled
+                      className="w-full px-3 sm:px-4 pr-8 py-2 sm:py-3 border-2 border-gray-200 rounded-lg sm:rounded-xl bg-gray-100 text-gray-700 text-sm font-medium cursor-not-allowed"
+                      placeholder="30"
+                    />
+                    <span className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium text-sm">%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Configure este valor na calculadora antes de criar o agendamento</p>
+                </div>
+
                 <div className="mb-2 sm:mb-3">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     💰 Valor da Entrada Paga
@@ -1499,6 +1620,27 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                       const travelFee = includeTravelFee && area ? area.travel_fee : 0
                       return (servicesTotal + travelFee).toFixed(2)
                     })()}`}</div>
+                    {selectedPartner && (
+                      <>
+                        <div className="text-yellow-700">
+                          <strong>👥 Parceiro:</strong> {partners.find(p => p.id === selectedPartner)?.name}
+                        </div>
+                        <div className="text-yellow-700">
+                          <strong>💸 Repasse:</strong> R$ {parseFloat(commissionAmount || '0').toFixed(2)}
+                        </div>
+                        <div className="text-green-700 font-semibold">
+                          <strong>✨ Seu Lucro:</strong> R$ {(() => {
+                            const totalValue = useManualPrice && manualPrice ? parseFloat(manualPrice.replace(',', '.')) : (() => {
+                              const servicesTotal = calculatedPrices.services.reduce((sum, service) => sum + service.totalPrice, 0)
+                              const area = areas.find(a => a.id === selectedArea)
+                              const travelFee = includeTravelFee && area ? area.travel_fee : 0
+                              return servicesTotal + travelFee
+                            })()
+                            return (totalValue - parseFloat(commissionAmount || '0')).toFixed(2)
+                          })()}
+                        </div>
+                      </>
+                    )}
                     {!useManualPrice && (
                       <div><strong>⏱️ Tempo Estimado:</strong> {formatDuration(calculatedPrices.services.reduce((total, service) => {
                         const serviceInfo = services.find(s => s.id === service.serviceId)
