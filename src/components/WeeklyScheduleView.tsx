@@ -102,6 +102,7 @@ export function WeeklyScheduleView({
   const [highlightedAppointmentId, setHighlightedAppointmentId] = useState<string | null>(null)
   const [expandedAppointmentIds, setExpandedAppointmentIds] = useState<Set<string>>(new Set())
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [hideEmptyPrestadores, setHideEmptyPrestadores] = useState(false)
 
   // Refs para scroll sincronizado
   const calendarCardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -190,7 +191,7 @@ export function WeeklyScheduleView({
     return prestadores
   }, [user, partners, selectedPrestadores, selectedPrestadorMobile, isMobile])
 
-  // Filtrar agendamentos pela semana atual
+  // Filtrar agendamentos pela semana atual (precisa vir antes de filteredPrestadores)
   const weekAppointments = useMemo(() => {
     const weekStart = new Date(currentWeekStart)
     const weekEnd = new Date(currentWeekStart)
@@ -202,6 +203,21 @@ export function WeeklyScheduleView({
       return aptDate >= weekStart && aptDate < weekEnd
     })
   }, [appointments, currentWeekStart])
+
+  // Filtrar prestadores que têm agendamentos na semana (quando hideEmptyPrestadores está ativo)
+  const filteredPrestadores = useMemo(() => {
+    if (!hideEmptyPrestadores) return activePrestadores
+
+    return activePrestadores.filter(prestador => {
+      // Verificar se este prestador tem pelo menos 1 agendamento na semana
+      return weekAppointments.some(apt => {
+        const isForThisPrestador = 
+          (prestador.id === user.id && apt.user_id === user.id && !apt.partner_id) ||
+          (apt.partner_id === prestador.id)
+        return isForThisPrestador
+      })
+    })
+  }, [activePrestadores, hideEmptyPrestadores, weekAppointments, user.id])
 
   // Navegação
   const goToPreviousWeek = () => {
@@ -325,11 +341,10 @@ export function WeeklyScheduleView({
         {/* Layout para cards pequenos (< 60px) */}
         {height < 60 && (
           <>
-            <div className="font-bold truncate leading-tight flex items-center gap-1">
-              <span className="text-xs">{getStatusIcon()}</span>
-              <span>{appointment.client?.name || 'Cliente'}</span>
+            <div className="font-bold truncate leading-tight">
+              {appointment.client?.name || 'Cliente'}
             </div>
-            <div className="truncate leading-tight text-xs opacity-90">
+            <div className="truncate leading-tight text-xs opacity-90 font-semibold">
               {appointment.scheduled_time}
             </div>
           </>
@@ -338,55 +353,55 @@ export function WeeklyScheduleView({
         {/* Layout para cards médios (60-100px) */}
         {height >= 60 && height < 100 && (
           <>
-            <div className="font-bold truncate leading-tight flex items-center gap-1">
-              <span>{getStatusIcon()}</span>
-              <span>{appointment.client?.name || 'Cliente'}</span>
+            <div className="flex items-center justify-between gap-1 mb-0.5">
+              <div className="font-bold truncate leading-tight flex-1">
+                {appointment.client?.name || 'Cliente'}
+              </div>
+              <span className="text-xs flex-shrink-0">{getStatusIcon()}</span>
             </div>
-            <div className="truncate leading-tight opacity-90 flex items-center gap-1.5">
-              <span className="font-semibold">{appointment.scheduled_time}</span>
-              {!isMobile && <span>•</span>}
-              {!isMobile && <span>{Math.round(durationMinutes / 60)}h</span>}
+            <div className="truncate leading-tight text-xs font-semibold opacity-90">
+              {appointment.scheduled_time} • {Math.round(durationMinutes / 60)}h
             </div>
             {appointment.service_area && (
-              <div className="truncate leading-tight text-xs opacity-90">
+              <div className="truncate leading-tight text-xs opacity-75 mt-0.5">
                 📍 {appointment.service_area.name}
               </div>
             )}
-            {!isMobile && (
-              <div className="truncate leading-tight text-xs font-medium">
-                💄 {servicesInfo}
-              </div>
-            )}
+            <div className="truncate leading-tight text-xs font-medium opacity-90 mt-0.5">
+              💄 {servicesInfo}
+            </div>
           </>
         )}
 
         {/* Layout para cards grandes (>= 100px) */}
         {height >= 100 && (
           <>
-            <div className="font-bold truncate leading-tight flex items-center gap-1 mb-0.5">
-              <span>{getStatusIcon()}</span>
-              <span>{appointment.client?.name || 'Cliente'}</span>
-            </div>
-            <div className="truncate leading-tight opacity-90 flex items-center gap-1.5">
-              <span className="font-semibold">{appointment.scheduled_time}</span>
-              {!isMobile && <span>•</span>}
-              {!isMobile && <span>{Math.round(durationMinutes / 60)}h</span>}
-            </div>
-            {appointment.service_area && (
-              <div className="truncate leading-tight text-xs opacity-90 mt-0.5">
-                📍 {appointment.service_area.name}
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <div className="font-bold truncate leading-tight flex-1">
+                {appointment.client?.name || 'Cliente'}
               </div>
-            )}
-            <div className="truncate leading-tight text-xs font-medium mt-0.5">
-              💄 {servicesInfo}
+              <span className="text-sm flex-shrink-0">{getStatusIcon()}</span>
             </div>
-            {appointment.partner && (
-              <div className="truncate leading-tight text-xs opacity-90 mt-0.5">
-                👥 {appointment.partner.name}
+            <div className="truncate leading-tight text-xs font-semibold opacity-90">
+              ⏰ {appointment.scheduled_time} • {Math.round(durationMinutes / 60)}h
+            </div>
+            <div className="grid grid-cols-1 gap-0.5 mt-1">
+              {appointment.service_area && (
+                <div className="truncate leading-tight text-xs opacity-75">
+                  📍 {appointment.service_area.name}
+                </div>
+              )}
+              <div className="truncate leading-tight text-xs font-medium opacity-90">
+                💄 {servicesInfo}
               </div>
-            )}
+              {appointment.partner && (
+                <div className="truncate leading-tight text-xs opacity-75">
+                  👥 {appointment.partner.name}
+                </div>
+              )}
+            </div>
             {appointment.appointment_address && height >= 140 && !isMobile && (
-              <div className="truncate leading-tight text-xs opacity-75 mt-0.5">
+              <div className="truncate leading-tight text-xs opacity-70 mt-1 pt-1 border-t border-current">
                 🏠 {appointment.appointment_address}
               </div>
             )}
@@ -500,6 +515,29 @@ export function WeeklyScheduleView({
                 ({activePrestadores.length} selecionado{activePrestadores.length > 1 ? 's' : ''})
               </span>
             )}
+
+            {/* Toggle para ocultar prestadores sem agendamentos */}
+            {activePrestadores.length > 1 && (
+              <div className="ml-4 pl-4 border-l border-gray-300">
+                <button
+                  onClick={() => setHideEmptyPrestadores(!hideEmptyPrestadores)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    hideEmptyPrestadores
+                      ? 'bg-orange-500 text-white shadow-md'
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}
+                  title="Ocultar profissionais sem agendamentos nesta semana"
+                >
+                  {hideEmptyPrestadores ? '👁️' : '👁️‍🗨️'}
+                  <span>Ocultar vazios</span>
+                  {hideEmptyPrestadores && filteredPrestadores.length < activePrestadores.length && (
+                    <span className="bg-white text-orange-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
+                      {activePrestadores.length - filteredPrestadores.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -515,7 +553,7 @@ export function WeeklyScheduleView({
               <div className="sticky top-0 bg-gray-100 z-10 border-b border-gray-300">
                 <div className="h-16"></div>
                 {/* Espaço extra quando há múltiplos prestadores para alinhar com sub-header */}
-                {activePrestadores.length > 1 && (
+                {filteredPrestadores.length > 1 && (
                   <div className="h-[36px] border-t border-gray-300"></div>
                 )}
               </div>
@@ -557,9 +595,9 @@ export function WeeklyScheduleView({
                   </div>
 
                   {/* Sub-header com nomes dos prestadores (só aparece quando há múltiplos) */}
-                  {activePrestadores.length > 1 && (
+                  {filteredPrestadores.length > 1 && (
                     <div className="flex bg-gradient-to-r from-purple-50 to-blue-50 border-b border-gray-300">
-                      {activePrestadores.map((prestador, idx) => (
+                      {filteredPrestadores.map((prestador, idx) => (
                         <div 
                           key={prestador.id}
                           className={`flex-1 text-center py-2 border-r border-gray-200 last:border-r-0 ${
@@ -577,7 +615,7 @@ export function WeeklyScheduleView({
 
                 {/* Grid de horários do dia - uma coluna por prestador */}
                 <div className="flex">
-                  {activePrestadores.map((prestador, prestadorIndex) => {
+                  {filteredPrestadores.map((prestador, prestadorIndex) => {
                     // Cores alternadas para diferenciar colunas
                     const bgColorClass = prestadorIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                     const hoverBgClass = prestadorIndex % 2 === 0 ? 'hover:bg-blue-50' : 'hover:bg-purple-50'
