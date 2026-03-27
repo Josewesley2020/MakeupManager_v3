@@ -42,10 +42,13 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
+  const [showPaymentConfirmationModal, setShowPaymentConfirmationModal] = useState(false)
+  const [pendingStatusChange, setPendingStatusChange] = useState<'confirmed' | 'completed' | null>(null)
   const [editForm, setEditForm] = useState({
     status: 'pending' as 'pending' | 'confirmed' | 'completed' | 'cancelled',
     scheduled_date: '',
     scheduled_time: '',
+    appointment_address: '',
     notes: '',
     payment_status: 'pending' as 'pending' | 'paid',
     total_amount_paid: 0,
@@ -76,32 +79,31 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
     }
   }
 
-  // Função helper para verificar se agendamento está atrasado
-  const isAppointmentOverdue = (appointment: any) => {
-    if (!appointment.scheduled_date) return false
-    
-    const appointmentDate = new Date(appointment.scheduled_date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0) // Zera horas para comparar apenas datas
-    
-    // Se a data já passou e o status ainda é confirmado ou pendente
-    return appointmentDate < today && (appointment.status === 'confirmed' || appointment.status === 'pending')
+  // Função simples para estilo do card baseado APENAS no status
+  const getCardStyle = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-blue-50 border-l-4 border-blue-500' // Azul para realizado
+      case 'cancelled':
+        return 'bg-red-50 border-l-4 border-red-500' // Vermelho para cancelado
+      case 'confirmed':
+        return 'bg-green-50 border-l-4 border-green-500' // Verde para confirmado
+      case 'pending':
+      default:
+        return 'bg-orange-50 border-l-4 border-orange-500' // Laranja para pendente
+    }
   }
 
-  // Função helper para verificar se agendamento está próximo (menos de 7 dias)
-  const isAppointmentUpcoming = (appointment: any) => {
+  // Função para verificar se agendamento precisa ter status atualizado
+  const needsStatusUpdate = (appointment: any) => {
+    if (appointment.status !== 'confirmed') return false
     if (!appointment.scheduled_date) return false
     
     const appointmentDate = new Date(appointment.scheduled_date)
     const today = new Date()
-    today.setHours(0, 0, 0, 0) // Zera horas para comparar apenas datas
+    today.setHours(0, 0, 0, 0)
     
-    // Calcula diferença em dias
-    const diffTime = appointmentDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    // Está próximo se for hoje ou nos próximos 7 dias (incluindo hoje)
-    return diffDays >= 0 && diffDays <= 7 && (appointment.status === 'confirmed' || appointment.status === 'pending')
+    return appointmentDate < today // Data já passou
   }
 
   const loadAppointments = async () => {
@@ -111,9 +113,6 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
     setError(null)
 
     try {
-      // Primeiro, garantir que a migração do campo total_duration_minutes foi executada
-      await ensureTotalDurationField()
-
       const { data, error } = await supabase
         .from('appointments')
         .select(`
@@ -143,36 +142,34 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
           )
         `)
         .eq('user_id', user.id)
-        .order('scheduled_date', { ascending: false })
-        .order('scheduled_time', { ascending: false })
+        .order('scheduled_date', { ascending: true, nullsFirst: false })
+        .order('scheduled_time', { ascending: true, nullsFirst: false })
+        .limit(100)
 
       if (error) throw error
       
-      // Buscar dados de parceiros manualmente (workaround temporário)
-      const appointmentsWithPartners = await Promise.all(
-        (data || []).map(async (apt: any) => {
-          if (apt.partner_id) {
-            const { data: partnerData } = await supabase
-              .from('partners')
-              .select('id, name, phone')
-              .eq('id', apt.partner_id)
-              .single()
-            
-            return {
-              ...apt,
-              client: Array.isArray(apt.clients) ? apt.clients[0] : apt.clients,
-              service_area: Array.isArray(apt.service_areas) ? apt.service_areas[0] : apt.service_areas,
-              partner: partnerData
-            }
-          }
-          return {
-            ...apt,
-            client: Array.isArray(apt.clients) ? apt.clients[0] : apt.clients,
-            service_area: Array.isArray(apt.service_areas) ? apt.service_areas[0] : apt.service_areas,
-            partner: null
-          }
-        })
-      )
+      // Buscar TODOS os parceiros de UMA VEZ (otimização)
+      const partnerIds = [...new Set((data || []).map(apt => apt.partner_id).filter(Boolean))]
+      let partnersMap = new Map()
+      
+      if (partnerIds.length > 0) {
+        const { data: partnersData } = await supabase
+          .from('partners')
+          .select('id, name, phone')
+          .in('id', partnerIds)
+        
+        if (partnersData) {
+          partnersData.forEach(p => partnersMap.set(p.id, p))
+        }
+      }
+      
+      // Mapear dados com parceiros já carregados
+      const appointmentsWithPartners = (data || []).map((apt: any) => ({
+        ...apt,
+        client: Array.isArray(apt.clients) ? apt.clients[0] : apt.clients,
+        service_area: Array.isArray(apt.service_areas) ? apt.service_areas[0] : apt.service_areas,
+        partner: apt.partner_id ? partnersMap.get(apt.partner_id) : null
+      }))
 
       setAppointments(appointmentsWithPartners || [])
     } catch (err: any) {
@@ -184,11 +181,17 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
   }
 
   const filteredAppointments = appointments.filter(appointment => {
-    // Filtro especial para agendamentos atrasados
+    // Filtro especial para agendamentos que precisam ter status atualizado
     if (filter === 'overdue') {
-      // Apenas agendamentos confirmados que já passaram da data
+      // Apenas agendamentos confirmados que já passaram da data (precisam ser marcados como realizados ou cancelados)
       if (appointment.status !== 'confirmed') return false
-      if (!isAppointmentOverdue(appointment)) return false
+      if (!appointment.scheduled_date) return false
+      
+      const appointmentDate = new Date(appointment.scheduled_date)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      if (appointmentDate >= today) return false // Ainda não passou da data - não precisa atualizar
     } else {
       // Filtro normal por status
       if (filter !== 'all' && appointment.status !== filter) return false
@@ -273,6 +276,7 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
       status: appointment.status,
       scheduled_date: appointment.scheduled_date || '',
       scheduled_time: appointment.scheduled_time || '',
+      appointment_address: appointment.appointment_address || '',
       notes: appointment.notes || '',
       payment_status: appointment.payment_status,
       total_amount_paid: appointment.total_amount_paid || 0,
@@ -287,6 +291,7 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
       status: 'pending',
       scheduled_date: '',
       scheduled_time: '',
+      appointment_address: '',
       notes: '',
       payment_status: 'pending',
       total_amount_paid: 0,
@@ -297,6 +302,18 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
 
   const saveAppointment = async () => {
     if (!editingAppointment || !user?.id) return
+
+    // VALIDAÇÃO: Status confirmado/completed requer endereço + data + hora
+    if ((editForm.status === 'confirmed' || editForm.status === 'completed')) {
+      if (!editForm.appointment_address || !editForm.appointment_address.trim()) {
+        alert('⚠️ Para confirmar ou concluir o agendamento, é necessário informar o endereço!')
+        return
+      }
+      if (!editForm.scheduled_date || !editForm.scheduled_time) {
+        alert('⚠️ Para confirmar ou concluir o agendamento, é necessário informar data e horário!')
+        return
+      }
+    }
 
     try {
       // Verificar se os valores financeiros foram editados
@@ -313,6 +330,7 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
           status: editForm.status,
           scheduled_date: editForm.scheduled_date || null,
           scheduled_time: editForm.scheduled_time || null,
+          appointment_address: editForm.appointment_address || null,
           notes: editForm.notes || null,
           total_amount_paid: editForm.total_amount_paid,
           payment_status: editForm.payment_status,
@@ -571,7 +589,7 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                 <option value="all">Todos</option>
                 <option value="pending">Aguardando Confirmação</option>
                 <option value="confirmed">Confirmado</option>
-                <option value="overdue">Atrasados</option>
+                <option value="overdue">⚠️ Necessita Atualização</option>
                 <option value="completed">Realizado</option>
                 <option value="cancelled">Cancelado</option>
               </select>
@@ -613,33 +631,14 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
               const isExpanded = expandedCards.has(appointment.id)
 
               // Define cores baseadas no status
-              const getCardStyle = (status: string, paymentStatus: string, appointment: any) => {
-                // Primeiro verifica se está próximo (menos de 7 dias) - prioridade máxima
-                if (isAppointmentUpcoming(appointment)) {
-                  return 'bg-gradient-to-r from-purple-100 to-pink-100 border-l-4 border-purple-500 shadow-lg' // Roxo/rosa para próximos
-                }
-                
-                if (status === 'completed') {
-                  return 'bg-blue-50 border-l-4 border-blue-500' // Azul para realizado
-                } else if (status === 'cancelled') {
-                  return 'bg-red-50 border-l-4 border-red-500' // Vermelho para cancelado
-                } else if (status === 'confirmed') {
-                  return 'bg-green-50 border-l-4 border-green-500' // Verde para confirmado
-                } else if (paymentStatus === 'paid') {
-                  return 'bg-emerald-50 border-l-4 border-emerald-500' // Verde escuro para pago
-                } else {
-                  return 'bg-orange-50 border-l-4 border-orange-500' // Laranja para pendente
-                }
-              }
-
               return (
-                <div key={appointment.id} className={`${getCardStyle(appointment.status, appointment.payment_status, appointment)} rounded-xl shadow-lg overflow-hidden`}>
+                <div key={appointment.id} className={`${getCardStyle(appointment.status)} rounded-xl shadow-lg overflow-hidden`}>
                   {/* Card Principal - Sempre Visível */}
                   <div className="p-3 sm:p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 flex-wrap gap-1">
                             <h3 className="font-semibold text-gray-900 text-base truncate">
                               {appointment.client?.name || 'Cliente não informado'}
                             </h3>
@@ -648,14 +647,9 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                                 👥 {appointment.partner.name}
                               </span>
                             )}
-                            {isAppointmentOverdue(appointment) && (
-                              <span className="text-orange-500 text-sm animate-pulse flex-shrink-0" title="Agendamento atrasado - atualizar status">
-                                ⚠️
-                              </span>
-                            )}
-                            {isAppointmentUpcoming(appointment) && (
-                              <span className="text-purple-600 text-sm animate-pulse flex-shrink-0" title="Próximo">
-                                🔥
+                            {needsStatusUpdate(appointment) && (
+                              <span className="text-xs bg-gradient-to-r from-red-100 to-orange-100 text-red-700 px-2 py-0.5 rounded-lg font-medium flex-shrink-0 border border-red-300 animate-pulse" title="Agendamento confirmado com data passada - precisa atualizar status">
+                                ⚠️ Necessita Atualização
                               </span>
                             )}
                           </div>
@@ -663,17 +657,19 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
 
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                           <div className="text-sm text-gray-600 mb-1 sm:mb-0">
-                            📅 {formatDateTime(appointment.scheduled_date, appointment.scheduled_time)}
-                            {appointment.total_duration_minutes !== undefined && appointment.total_duration_minutes !== null && (
-                              <span className="ml-2 text-blue-600 font-medium">
-                                ⏱️ {formatDuration(appointment.total_duration_minutes)}
-                              </span>
-                            )}
-                            {isAppointmentUpcoming(appointment) && (
-                              <div className="text-xs text-purple-600 font-semibold mt-1 animate-pulse">
-                                🔥 AGENDAMENTO PRÓXIMO
-                              </div>
-                            )}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>📅 {formatDateTime(appointment.scheduled_date, appointment.scheduled_time)}</span>
+                              {appointment.total_duration_minutes !== undefined && appointment.total_duration_minutes !== null && (
+                                <span className="text-blue-600 font-medium">
+                                  ⏱️ {formatDuration(appointment.total_duration_minutes)}
+                                </span>
+                              )}
+                              {appointment.service_area?.name && (
+                                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                  📍 {appointment.service_area.name}
+                                </span>
+                              )}
+                            </div>
                             {appointment.appointment_address && (
                               <div className="flex items-center space-x-1 mt-1">
                                 <button
@@ -748,7 +744,7 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                         >
                           ✏️ Editar
                         </button>
-                        {isAppointmentUpcoming(appointment) && (
+                        {(appointment.status === 'confirmed' || appointment.status === 'pending') && (
                           <button 
                             onClick={() => sendReminder(appointment)}
                             className="px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-medium transition-colors"
@@ -1031,27 +1027,42 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                   value={editForm.status}
                   onChange={(e) => {
                     const newStatus = e.target.value as any
-                    // Se o status for alterado para "completed", perguntar se deseja marcar como pago
-                    if (newStatus === 'completed' && editForm.payment_status !== 'paid') {
-                      const shouldMarkAsPaid = window.confirm(
-                        '💰 Deseja marcar este agendamento como PAGO ao concluí-lo?\n\n' +
-                        `Valor total: R$ ${editingAppointment.payment_total_service.toFixed(2)}\n` +
-                        `Valor já pago: R$ ${editForm.total_amount_paid.toFixed(2)}\n\n` +
-                        'Clique "OK" para marcar como pago ou "Cancelar" para manter o status de pagamento atual.'
-                      )
-                      if (shouldMarkAsPaid) {
-                        setEditForm({
-                          ...editForm,
-                          status: newStatus,
-                          payment_status: 'paid',
-                          total_amount_paid: editingAppointment.payment_total_service
-                        })
-                      } else {
-                        setEditForm({...editForm, status: newStatus})
+                    
+                    // VALIDAÇÃO: Verificar se tem endereço, data e hora antes de confirmar/completar
+                    if ((newStatus === 'confirmed' || newStatus === 'completed')) {
+                      if (!editForm.appointment_address || !editForm.appointment_address.trim()) {
+                        alert('⚠️ Para confirmar ou concluir o agendamento, preencha primeiro o endereço!')
+                        return
                       }
-                    } else {
-                      setEditForm({...editForm, status: newStatus})
+                      if (!editForm.scheduled_date || !editForm.scheduled_time) {
+                        alert('⚠️ Para confirmar ou concluir o agendamento, preencha primeiro a data e horário!')
+                        return
+                      }
+                      
+                      // Se tentar confirmar/completar e pagamento não está como pago, abrir modal de confirmação
+                      if (editForm.payment_status !== 'paid') {
+                        setPendingStatusChange(newStatus)
+                        
+                        const totalAppointment = editForm.payment_total_service + editForm.travel_fee
+                        
+                        // Preencher o campo com o valor sugerido de acordo com o status
+                        if (newStatus === 'confirmed') {
+                          // Entrada esperada: 30% do total
+                          const entradaEsperada = totalAppointment * 0.3
+                          setEditForm(prev => ({...prev, total_amount_paid: entradaEsperada}))
+                        } else if (newStatus === 'completed') {
+                          // Valor restante: total - já pago
+                          const valorRestante = totalAppointment - editingAppointment.total_amount_paid
+                          setEditForm(prev => ({...prev, total_amount_paid: valorRestante}))
+                        }
+                        
+                        setShowPaymentConfirmationModal(true)
+                        return
+                      }
                     }
+                    
+                    // Se não precisa de validação de pagamento, muda direto
+                    setEditForm({...editForm, status: newStatus})
                   }}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white text-gray-900"
                 >
@@ -1060,6 +1071,21 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                   <option value="completed">🎉 Serviço Realizado</option>
                   <option value="cancelled">❌ Agendamento Cancelado</option>
                 </select>
+              </div>
+
+              {/* Endereço do Agendamento */}
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-2xl border border-green-100">
+                <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                  <span className="mr-2">📍</span>
+                  Endereço do Agendamento
+                </label>
+                <textarea
+                  value={editForm.appointment_address}
+                  onChange={(e) => setEditForm({...editForm, appointment_address: e.target.value})}
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white text-gray-900 resize-none"
+                  placeholder="Digite o endereço completo do agendamento"
+                />
               </div>
 
               {/* Data e Horário */}
@@ -1231,6 +1257,212 @@ ${appointment.notes ? `📝 *Observações:* ${appointment.notes}` : ''}
                   className="flex-1 py-3 px-6 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl font-semibold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg"
                 >
                   💾 Salvar Alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Pagamento */}
+      {showPaymentConfirmationModal && editingAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-sm sm:max-w-lg w-full max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white p-3 sm:p-4 rounded-t-2xl sm:rounded-t-3xl flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                    <span className="text-lg sm:text-xl">💰</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-base sm:text-lg font-bold truncate">
+                      Confirmar Pagamento
+                    </h2>
+                    <p className="text-green-100 text-xs">
+                      {pendingStatusChange === 'confirmed' ? 'Entrada do agendamento' : 'Pagamento final do serviço'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPaymentConfirmationModal(false)
+                    setPendingStatusChange(null)
+                  }}
+                  className="w-7 h-7 sm:w-8 sm:h-8 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 flex-shrink-0 ml-2"
+                >
+                  <span className="text-white text-sm sm:text-lg">×</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Body - Scrollable */}
+            <div className="max-h-[35vh] sm:max-h-[45vh] overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+              {/* Resumo do Agendamento */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-2 sm:p-3 rounded-lg sm:rounded-xl border border-blue-100">
+                <h4 className="font-semibold text-gray-800 mb-1 sm:mb-2 flex items-center text-xs sm:text-sm">
+                  <span className="mr-1 sm:mr-2">📋</span>
+                  Resumo do Agendamento
+                </h4>
+                <div className="text-xs text-blue-800 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="font-medium">👤 Cliente:</span>
+                    <span className="truncate ml-1 text-xs">{editingAppointment.client?.name || 'Cliente não informado'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">💰 Total:</span>
+                    <span className="font-semibold text-sm">
+                      R$ {(editForm.payment_total_service + editForm.travel_fee).toFixed(2)}
+                    </span>
+                  </div>
+                  {editingAppointment.commission_amount > 0 && editingAppointment.partner && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="font-medium">👥 Parceiro:</span>
+                        <span className="truncate ml-1 text-xs">{editingAppointment.partner.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">💸 Repasse:</span>
+                        <span className="font-semibold text-yellow-600 text-sm">
+                          R$ {editingAppointment.commission_amount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-blue-200 pt-1 mt-1">
+                        <span className="font-medium">✨ Seu lucro:</span>
+                        <span className="font-semibold text-green-600 text-sm">
+                          R$ {((editForm.payment_total_service + editForm.travel_fee) - editingAppointment.commission_amount).toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {pendingStatusChange === 'confirmed' ? (
+                    <div className="flex justify-between">
+                      <span className="font-medium">💳 Entrada esperada (30%):</span>
+                      <span className="font-semibold text-green-600 text-sm">
+                        R$ {((editForm.payment_total_service + editForm.travel_fee) * 0.3).toFixed(2)}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between border-t border-blue-200 pt-1 mt-1">
+                        <span className="font-medium">💵 Já pago:</span>
+                        <span className="font-semibold text-blue-600 text-sm">
+                          R$ {editingAppointment.total_amount_paid.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">💰 Valor restante:</span>
+                        <span className="font-semibold text-orange-600 text-sm">
+                          R$ {((editForm.payment_total_service + editForm.travel_fee) - editingAppointment.total_amount_paid).toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="font-medium">📅 Data:</span>
+                    <span className="truncate ml-1 text-xs">{editForm.scheduled_date ? formatDate(editForm.scheduled_date) : 'Não definida'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">⏰ Horário:</span>
+                    <span className="truncate ml-1 text-xs">{editForm.scheduled_time || 'Não definido'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Campo de entrada do valor pago */}
+              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-2 sm:p-3 rounded-lg sm:rounded-xl border border-yellow-100">
+                <h4 className="font-semibold text-yellow-800 mb-2 flex items-center text-xs sm:text-sm">
+                  <span className="mr-1 sm:mr-2">💰</span>
+                  {pendingStatusChange === 'confirmed' 
+                    ? 'Valor da Entrada Recebida' 
+                    : 'Restante do Pagamento Recebido'}
+                </h4>
+                <div className="relative">
+                  <span className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium text-sm">R$</span>
+                  <input
+                    type="number"
+                    step="10"
+                    value={editForm.total_amount_paid}
+                    onChange={(e) => setEditForm({...editForm, total_amount_paid: parseFloat(e.target.value) || 0})}
+                    className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2 sm:py-3 border-2 border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all duration-200 bg-white text-gray-900 text-sm font-semibold"
+                    placeholder="0.00"
+                  />
+                </div>
+                <p className="text-xs text-yellow-700 mt-2">
+                  ℹ️ {pendingStatusChange === 'confirmed' 
+                    ? `Valor sugerido: R$ ${((editForm.payment_total_service + editForm.travel_fee) * 0.3).toFixed(2)} (30% de entrada). Ajuste se necessário.`
+                    : `Valor sugerido: R$ ${((editForm.payment_total_service + editForm.travel_fee) - editingAppointment.total_amount_paid).toFixed(2)} (restante). Ajuste se necessário.`}
+                </p>
+              </div>
+
+              {/* Aviso Importante */}
+              <div className="bg-gradient-to-r from-red-50 to-pink-50 p-2 sm:p-3 rounded-lg sm:rounded-xl border border-red-100">
+                <div className="flex items-start space-x-1 sm:space-x-2">
+                  <span className="text-red-500 text-base sm:text-lg flex-shrink-0">⚠️</span>
+                  <div>
+                    <h4 className="font-semibold text-red-800 mb-1 text-xs sm:text-sm">Importante</h4>
+                    <p className="text-xs text-red-700">
+                      {pendingStatusChange === 'confirmed' 
+                        ? 'Ao confirmar, o agendamento será marcado como "Confirmado". Certifique-se de que o pagamento da entrada foi realmente recebido.' 
+                        : 'Ao concluir, o agendamento será marcado como "Realizado". Informe o valor recebido para fechar o pagamento.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer - Fixed */}
+            <div className="bg-gray-50 px-3 sm:px-4 py-2 sm:py-3 rounded-b-2xl sm:rounded-b-3xl border-t border-gray-200 flex-shrink-0">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setShowPaymentConfirmationModal(false)
+                    setPendingStatusChange(null)
+                  }}
+                  className="w-full py-2 px-3 bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white rounded-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg text-xs sm:text-sm"
+                >
+                  ❌ Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    // Confirmar pagamento e mudar status
+                    const totalAppointment = editForm.payment_total_service + editForm.travel_fee
+                    
+                    let newTotalPaid = editForm.total_amount_paid
+                    
+                    // Se está marcando como confirmed, o valor digitado é o TOTAL pago até agora (entrada)
+                    if (pendingStatusChange === 'confirmed') {
+                      // O valor no campo já é o total pago (entrada), usa direto
+                      newTotalPaid = editForm.total_amount_paid
+                    }
+                    // Se está marcando como completed, o valor digitado é o ADICIONAL recebido agora
+                    else if (pendingStatusChange === 'completed') {
+                      const valorRestante = totalAppointment - editingAppointment.total_amount_paid
+                      
+                      // Se o usuário deixou o valor sugerido (restante), soma ao já pago
+                      if (editForm.total_amount_paid === valorRestante) {
+                        newTotalPaid = totalAppointment // Pagou tudo (já pago + restante)
+                      } else {
+                        // Usuário alterou o valor - soma o digitado ao já pago
+                        newTotalPaid = editingAppointment.total_amount_paid + editForm.total_amount_paid
+                      }
+                    }
+                    
+                    const isPaidInFull = newTotalPaid >= totalAppointment
+                    
+                    setEditForm({
+                      ...editForm,
+                      status: pendingStatusChange!,
+                      payment_status: isPaidInFull ? 'paid' : 'pending',
+                      total_amount_paid: newTotalPaid
+                    })
+                    
+                    setShowPaymentConfirmationModal(false)
+                    setPendingStatusChange(null)
+                  }}
+                  className="w-full py-2 px-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg text-xs sm:text-sm"
+                >
+                  ✅ {pendingStatusChange === 'confirmed' ? 'Confirmar Entrada' : 'Concluir Atendimento'}
                 </button>
               </div>
             </div>

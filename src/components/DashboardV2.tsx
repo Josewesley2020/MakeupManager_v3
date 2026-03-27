@@ -36,7 +36,7 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
       setLoading(true)
       const [metricsResult, upcomingResult, profileResult] = await Promise.all([
         supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
-        supabase.from('appointments').select(`*, total_duration_minutes, clients (name, phone), appointment_services (quantity, unit_price, total_price, services (name))`)
+        supabase.from('appointments').select(`*, total_duration_minutes, clients (name, phone), appointment_services (quantity, unit_price, total_price, services (name)), service_areas (name), partners (name, phone)`)
           .eq('user_id', user.id).eq('status', 'confirmed').gte('scheduled_date', new Date().toLocaleDateString('sv-SE'))
           .order('scheduled_date', { ascending: true }).order('scheduled_time', { ascending: true }).limit(5),
         supabase.from('profiles').select('full_name').eq('id', user.id).single()
@@ -80,6 +80,20 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
       case 'completed': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
       case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+    }
+  }
+
+  const getCardStyle = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-blue-50 border-l-4 border-blue-500'
+      case 'cancelled':
+        return 'bg-red-50 border-l-4 border-red-500'
+      case 'confirmed':
+        return 'bg-green-50 border-l-4 border-green-500'
+      case 'pending':
+      default:
+        return 'bg-orange-50 border-l-4 border-orange-500'
     }
   }
 
@@ -142,9 +156,9 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
               <div className="flex items-center space-x-2">
                 <span className="text-2xl">⏰</span>
                 <div>
-                  <h3 className={`text-sm font-bold ${darkMode ? 'text-yellow-300' : 'text-yellow-800'}`}>Aguardando Confirmação</h3>
+                  <h3 className={`text-sm font-bold ${darkMode ? 'text-yellow-300' : 'text-yellow-800'}`}>Pendentes de Confirmação</h3>
                   <p className={`text-xs ${darkMode ? 'text-yellow-500/70' : 'text-yellow-700/70'}`}>
-                    {dashboardData.pendingAppointments === 0 ? 'Tudo ok' : `${dashboardData.pendingAppointments} pendente${dashboardData.pendingAppointments > 1 ? 's' : ''}`}
+                    {dashboardData.pendingAppointments === 0 ? 'Tudo ok' : `${dashboardData.pendingAppointments} aguardando`}
                   </p>
                 </div>
               </div>
@@ -162,7 +176,7 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
                 <div>
                   <h3 className={`text-sm font-bold ${darkMode ? 'text-red-300' : 'text-red-800'}`}>Aguardando Conclusão</h3>
                   <p className={`text-xs ${darkMode ? 'text-red-500/70' : 'text-red-700/70'}`}>
-                    {dashboardData.overdueAppointments === 0 ? 'Tudo em dia' : `${dashboardData.overdueAppointments} atrasado${dashboardData.overdueAppointments > 1 ? 's' : ''}`}
+                    {dashboardData.overdueAppointments === 0 ? 'Tudo em dia' : `${dashboardData.overdueAppointments} precisa${dashboardData.overdueAppointments > 1 ? 'm' : ''} atualizar`}
                   </p>
                 </div>
               </div>
@@ -217,33 +231,72 @@ export function DashboardV2({ user, onLogout }: DashboardV2Props) {
 
             {/* PRÓXIMOS AGENDAMENTOS */}
             <div>
-              <h2 className={`text-xs font-semibold mb-2 uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>📋 Próximos</h2>
-              <div className={`rounded-lg overflow-hidden border ${darkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-200'}`}>
+              <h2 className={`text-xs font-semibold mb-2 uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>📋 Próximos Agendamentos</h2>
+              <div className="space-y-2">
                 {loading ? (
-                  <div className="p-4 text-center"><div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto"></div></div>
+                  <div className="p-4 text-center bg-white rounded-lg border border-gray-200"><div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto"></div></div>
                 ) : dashboardData.upcomingAppointments.length === 0 ? (
-                  <div className="p-4 text-center">
+                  <div className="p-4 text-center bg-white rounded-lg border border-gray-200">
                     <div className="text-2xl mb-1">📭</div>
-                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Nenhum agendamento</p>
+                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Nenhum agendamento próximo</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <>
                     {dashboardData.upcomingAppointments.map((apt: any) => (
-                      <div key={apt.id} onClick={() => setCurrentView('appointments')} className="p-2.5 hover:bg-gray-50 dark:hover:bg-gray-750 transition cursor-pointer">
-                        <div className="flex justify-between items-start">
+                      <div 
+                        key={apt.id} 
+                        onClick={() => {
+                          setCurrentView('appointments')
+                          setAppointmentFilters({ status: 'confirmed', paymentStatus: null })
+                        }} 
+                        className={`${getCardStyle(apt.status)} rounded-lg shadow-md p-3 hover:shadow-lg transition-all cursor-pointer`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-1.5 mb-0.5">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getStatusColor(apt.status)}`}>✓</span>
-                              <span className={`text-sm font-semibold truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{apt.clients?.name || 'Cliente'}</span>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(apt.status)}`}>
+                                {apt.status === 'confirmed' ? '✓ Confirmado' : 
+                                 apt.status === 'pending' ? '⏱ Pendente' : 
+                                 apt.status === 'completed' ? '✓ Realizado' : '✗'}
+                              </span>
+                              {apt.partners?.name && (
+                                <span className="bg-gradient-to-r from-cyan-100 to-purple-100 text-cyan-700 px-2 py-0.5 rounded-full text-xs font-medium border border-cyan-200">
+                                  👥 {apt.partners.name}
+                                </span>
+                              )}
                             </div>
-                            <div className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{getMainServiceName(apt)}</div>
-                            <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>📅 {formatDate(apt.scheduled_date)}{apt.scheduled_time && ` ${apt.scheduled_time}`}</div>
+                            <div className={`text-sm font-bold truncate mb-1 ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                              {apt.clients?.name || 'Cliente não informado'}
+                            </div>
+                            <div className={`text-xs truncate mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              💄 {getMainServiceName(apt)}
+                            </div>
+                            <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'} flex items-center gap-2 flex-wrap`}>
+                              <span className="flex items-center gap-1">
+                                <span>📅 {formatDate(apt.scheduled_date)}</span>
+                                {apt.scheduled_time && <span className="text-blue-500 font-semibold">{apt.scheduled_time.substring(0, 5)}</span>}
+                              </span>
+                              {apt.service_areas?.name && (
+                                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                  📍 {apt.service_areas.name}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className={`text-sm font-bold ml-2 ${darkMode ? 'text-purple-400' : 'text-purple-600'}`}>R$ {apt.payment_total_appointment?.toFixed(2) || '0'}</div>
+                          <div className="text-right flex-shrink-0">
+                            <div className={`text-base font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                              R$ {apt.payment_total_appointment?.toFixed(2) || '0.00'}
+                            </div>
+                            {apt.total_amount_paid > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Pago: R$ {apt.total_amount_paid?.toFixed(2) || '0.00'}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </>
                 )}
               </div>
             </div>

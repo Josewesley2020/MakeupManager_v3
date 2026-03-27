@@ -730,7 +730,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1"
           >
             <span>←</span>
-            <span>Voltar ao Calendário</span>
+            <span>Calendário</span>
           </button>
         )}
       </div>
@@ -1166,6 +1166,44 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                   </div>
                 )}
               </div>
+
+              {/* Configuração da Taxa de Agendamento */}
+              <div className="mt-4 bg-gradient-to-r from-yellow-50 to-orange-50 p-4 rounded-lg border border-yellow-200">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <span className="mr-2">📊</span>
+                  Taxa de Agendamento (% de entrada)
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      value={downPaymentPercentage}
+                      onChange={(e) => setDownPaymentPercentage(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                      className="w-full px-4 pr-10 py-3 border-2 border-yellow-300 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all duration-200 bg-white text-gray-900 font-semibold text-lg"
+                      placeholder="30"
+                      step="5"
+                      min="0"
+                      max="100"
+                    />
+                    <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-600 font-bold text-lg">%</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-600">Valor da entrada:</div>
+                    <div className="text-lg font-bold text-yellow-700">
+                      R$ {(() => {
+                        const servicesTotal = calculatedPrices.services.reduce((sum, service) => sum + service.totalPrice, 0)
+                        const area = areas.find(a => a.id === selectedArea)
+                        const travelFee = includeTravelFee && area ? area.travel_fee : 0
+                        const total = useManualPrice && manualPrice ? parseFloat(manualPrice.replace(',', '.')) : (servicesTotal + travelFee)
+                        return (total * (downPaymentPercentage / 100)).toFixed(2)
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  💡 Esta porcentagem será usada para calcular o valor de entrada ao criar o agendamento
+                </p>
+              </div>
             </div>
 
             {/* Indicadores */}
@@ -1398,7 +1436,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                   Informações de Pagamento
                 </label>
 
-                {/* Porcentagem da Taxa de Agendamento */}
+                {/* Porcentagem da Taxa de Agendamento - SOMENTE LEITURA (editável apenas na calculadora) */}
                 <div className="mb-2 sm:mb-3">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     📊 Taxa de Agendamento (%)
@@ -1407,16 +1445,14 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
                     <input
                       type="number"
                       value={downPaymentPercentage}
-                      onChange={(e) => setDownPaymentPercentage(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
-                      className="w-full px-3 sm:px-4 pr-8 py-2 sm:py-3 border-2 border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all duration-200 bg-white text-gray-900 text-sm font-medium"
+                      readOnly
+                      disabled
+                      className="w-full px-3 sm:px-4 pr-8 py-2 sm:py-3 border-2 border-gray-200 rounded-lg sm:rounded-xl bg-gray-100 text-gray-700 text-sm font-medium cursor-not-allowed"
                       placeholder="30"
-                      step="5"
-                      min="0"
-                      max="100"
                     />
                     <span className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium text-sm">%</span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Porcentagem cobrada como entrada ao confirmar</p>
+                  <p className="text-xs text-gray-500 mt-1">Configure este valor na calculadora antes de criar o agendamento</p>
                 </div>
 
                 <div className="mb-2 sm:mb-3">
