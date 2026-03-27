@@ -99,11 +99,11 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
     if (appointment.status !== 'confirmed') return false
     if (!appointment.scheduled_date) return false
     
-    const appointmentDate = new Date(appointment.scheduled_date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    // Combinar data + hora para comparação precisa
+    const appointmentDateTime = new Date(`${appointment.scheduled_date}T${appointment.scheduled_time || '23:59:59'}`)
+    const now = new Date()
     
-    return appointmentDate < today // Data já passou
+    return appointmentDateTime < now // Data/hora já passou
   }
 
   const loadAppointments = async () => {
@@ -183,18 +183,25 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
   const filteredAppointments = appointments.filter(appointment => {
     // Filtro especial para agendamentos que precisam ter status atualizado
     if (filter === 'overdue') {
-      // Apenas agendamentos confirmados que já passaram da data (precisam ser marcados como realizados ou cancelados)
+      // Apenas agendamentos confirmados que já passaram da data/hora (precisam ser marcados como realizados ou cancelados)
       if (appointment.status !== 'confirmed') return false
       if (!appointment.scheduled_date) return false
       
-      const appointmentDate = new Date(appointment.scheduled_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      const appointmentDateTime = new Date(`${appointment.scheduled_date}T${appointment.scheduled_time || '23:59:59'}`)
+      const now = new Date()
       
-      if (appointmentDate >= today) return false // Ainda não passou da data - não precisa atualizar
+      if (appointmentDateTime >= now) return false // Ainda não passou da data/hora - não precisa atualizar
     } else {
       // Filtro normal por status
       if (filter !== 'all' && appointment.status !== filter) return false
+      
+      // Se filtrou por "confirmado", excluir os que têm data/hora passada (esses aparecem em "necessita atualização")
+      if (filter === 'confirmed' && appointment.scheduled_date) {
+        const appointmentDateTime = new Date(`${appointment.scheduled_date}T${appointment.scheduled_time || '23:59:59'}`)
+        const now = new Date()
+        
+        if (appointmentDateTime < now) return false // Data/hora já passou - não mostrar nos confirmados
+      }
     }
 
     // Filtro por status de pagamento
