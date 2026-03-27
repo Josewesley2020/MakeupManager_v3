@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase, formatDuration, formatDate, formatDateTime } from '../lib/supabase'
 import PaymentService from '../lib/PaymentService'
 import { Container } from './Container'
+import { WeeklyScheduleView } from './WeeklyScheduleView'
 
 interface CalendarPageProps {
   user: any
@@ -15,7 +16,11 @@ interface CalendarAppointment {
   scheduled_time: string | null
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   appointment_address: string | null
+  user_id: string
+  partner_id: string | null
   clients: any
+  partner?: any
+  service_area?: any
   appointment_services: any[]
   total_duration_minutes: number | null
   payment_total_service: number | null
@@ -33,9 +38,10 @@ export default function CalendarPage({ user, onBack, onCreateAppointment }: Cale
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedDateAppointments, setSelectedDateAppointments] = useState<CalendarAppointment[]>([])
-  const [viewMode, setViewMode] = useState<'month' | 'day'>('month')
+  const [viewMode, setViewMode] = useState<'month' | 'day' | 'week'>('week')
   const [selectedDay, setSelectedDay] = useState<Date | null>(new Date())
   const [editingAppointment, setEditingAppointment] = useState<CalendarAppointment | null>(null)
+  const [partners, setPartners] = useState<any[]>([])
   const [editForm, setEditForm] = useState({
     status: 'pending' as 'pending' | 'confirmed' | 'completed' | 'cancelled',
     scheduled_date: '',
@@ -50,7 +56,25 @@ export default function CalendarPage({ user, onBack, onCreateAppointment }: Cale
   // Carregar agendamentos do mês atual
   useEffect(() => {
     loadMonthAppointments()
+    loadPartners()
   }, [currentDate, user])
+
+  const loadPartners = async () => {
+    if (!user?.id) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('partners')
+        .select('id, name, phone')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true })
+      
+      if (error) throw error
+      setPartners(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar parceiros:', error)
+    }
+  }
 
   const loadMonthAppointments = async () => {
     if (!user?.id) return
@@ -79,13 +103,28 @@ export default function CalendarPage({ user, onBack, onCreateAppointment }: Cale
           is_custom_price,
           payment_status,
           notes,
+          user_id,
+          partner_id,
           clients!inner (
+            id,
             name,
             phone
           ),
+          partners (
+            id,
+            name,
+            phone
+          ),
+          service_areas (
+            id,
+            name
+          ),
           appointment_services (
             quantity,
+            unit_price,
+            total_price,
             services (
+              id,
               name
             )
           )
@@ -99,7 +138,14 @@ export default function CalendarPage({ user, onBack, onCreateAppointment }: Cale
 
       if (error) throw error
 
-      setAppointments(data || [])
+      // Mapear dados formatando o campo partner e service_area (array → objeto)
+      const formattedData = (data || []).map((apt: any) => ({
+        ...apt,
+        partner: Array.isArray(apt.partners) ? apt.partners[0] : apt.partners,
+        service_area: Array.isArray(apt.service_areas) ? apt.service_areas[0] : apt.service_areas
+      }))
+
+      setAppointments(formattedData)
     } catch (error) {
       console.error('Erro ao carregar agendamentos:', error)
     } finally {
@@ -291,49 +337,60 @@ export default function CalendarPage({ user, onBack, onCreateAppointment }: Cale
   const calendarDays = generateCalendarDays()
   const dayHours = generateDayHours()
 
-  return (
-    <Container>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4">
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            <span>←</span>
-            <span className="hidden sm:inline">Voltar</span>
-          </button>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">📅 Calendário</h1>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 w-full sm:w-auto">
-          <div className="flex bg-gray-100 rounded-lg p-1 w-full sm:w-auto">
-            <button
-              onClick={() => setViewMode('month')}
-              className={`flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                viewMode === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              📅 Mês
-            </button>
-            <button
-              onClick={() => setViewMode('day')}
-              className={`flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                viewMode === 'day' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              🕐 Dia
-            </button>
-          </div>
-          <button
-            onClick={goToToday}
-            className="px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs sm:text-sm font-medium"
-          >
-            Hoje
-          </button>
-        </div>
+  // Modo semanal usa tela inteira, outros modos usam Container
+  // Header separado
+  const header = (
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-4 pt-4 bg-white">
+      <div className="flex items-center space-x-2 sm:space-x-4">
+        <button
+          onClick={onBack}
+          className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
+        >
+          <span>←</span>
+          <span className="hidden sm:inline">Voltar</span>
+        </button>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">📅 Calendário</h1>
       </div>
 
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 w-full sm:w-auto">
+        <div className="flex bg-gray-100 rounded-lg p-1 w-full sm:w-auto">
+          <button
+            onClick={() => setViewMode('month')}
+            className={`flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+              viewMode === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📅 Mês
+          </button>
+          <button
+            onClick={() => setViewMode('week')}
+            className={`flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+              viewMode === 'week' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📆 Semana
+          </button>
+          <button
+            onClick={() => setViewMode('day')}
+            className={`flex-1 sm:flex-none px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+              viewMode === 'day' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            🕐 Dia
+          </button>
+        </div>
+        <button
+          onClick={goToToday}
+          className="px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs sm:text-sm font-medium"
+        >
+          Hoje
+        </button>
+      </div>
+    </div>
+  )
+
+  const content = (
+    <>
       {viewMode === 'month' ? (
         <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 py-2 sm:py-4">
           <Container className="space-y-3 sm:space-y-4">
@@ -1199,6 +1256,27 @@ export default function CalendarPage({ user, onBack, onCreateAppointment }: Cale
           </div>
         </div>
       )}
-    </Container>
+    </>
+  )
+
+  // Modo semanal: tela inteira (sem Container)
+  // Outros modos: dentro do Container
+  return viewMode === 'week' ? (
+    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+      {header}
+      <WeeklyScheduleView
+        user={user}
+        partners={partners}
+        appointments={appointments}
+        onAppointmentClick={startEditing}
+        onTimeSlotClick={(date, time, prestadorId) => {
+          if (onCreateAppointment) {
+            onCreateAppointment(date, time)
+          }
+        }}
+      />
+    </div>
+  ) : (
+    <Container>{header}{content}</Container>
   )
 }
