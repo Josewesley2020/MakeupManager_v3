@@ -53,7 +53,8 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
     payment_status: 'pending' as 'pending' | 'paid',
     total_amount_paid: 0,
     payment_total_service: 0,
-    travel_fee: 0
+    travel_fee: 0,
+    partner_id: null as string | null
   })
 
   useEffect(() => {
@@ -288,7 +289,8 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
       payment_status: appointment.payment_status,
       total_amount_paid: appointment.total_amount_paid || 0,
       payment_total_service: appointment.payment_total_service,
-      travel_fee: appointment.travel_fee
+      travel_fee: appointment.travel_fee,
+      partner_id: appointment.partner_id || null
     })
   }
 
@@ -303,7 +305,8 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
       payment_status: 'pending',
       total_amount_paid: 0,
       payment_total_service: 0,
-      travel_fee: 0
+      travel_fee: 0,
+      partner_id: null
     })
   }
 
@@ -318,6 +321,51 @@ export default function AppointmentsPage({ user, onBack, initialFilter = 'all', 
       }
       if (!editForm.scheduled_date || !editForm.scheduled_time) {
         alert('⚠️ Para confirmar ou concluir o agendamento, é necessário informar data e horário!')
+        return
+      }
+    }
+
+    // VALIDAÇÃO: Verificar conflito de horário se data/hora/prestador foram alterados
+    const dateChanged = editForm.scheduled_date !== editingAppointment.scheduled_date
+    const timeChanged = editForm.scheduled_time !== editingAppointment.scheduled_time
+    const partnerChanged = editForm.partner_id !== editingAppointment.partner_id
+    
+    if ((dateChanged || timeChanged || partnerChanged) && editForm.scheduled_date && editForm.scheduled_time) {
+      try {
+        // Determinar qual prestador verificar
+        const prestadorToCheck = editForm.partner_id || user.id
+
+        const { data: conflictData, error: conflictError } = await supabase.rpc(
+          'check_schedule_conflict',
+          {
+            p_prestador_id: prestadorToCheck,
+            p_scheduled_date: editForm.scheduled_date,
+            p_scheduled_time: editForm.scheduled_time,
+            p_duration_minutes: editingAppointment.total_duration_minutes || 60,
+            p_exclude_appointment_id: editingAppointment.id  // Excluir o próprio agendamento
+          }
+        )
+
+        if (conflictError) throw conflictError
+
+        if (conflictData && conflictData.length > 0 && conflictData[0].has_conflict) {
+          const conflict = conflictData[0]
+          const prestadorName = editForm.partner_id ? 
+            (editingAppointment.partner?.name || 'Parceiro') : 
+            'Você'
+          
+          alert(
+            `⚠️ Horário indisponível!\n\n` +
+            `${prestadorName} já tem agendamento neste horário:\n\n` +
+            `Cliente: ${conflict.conflict_client_name}\n` +
+            `Horário: ${conflict.conflict_time_start} - ${conflict.conflict_time_end}\n\n` +
+            `Escolha outro horário para evitar conflito.`
+          )
+          return
+        }
+      } catch (err: any) {
+        console.error('Erro ao verificar conflito:', err)
+        alert(`Erro ao verificar disponibilidade: ${err.message}`)
         return
       }
     }

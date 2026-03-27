@@ -616,7 +616,50 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
         }
       }
 
-      // 3. Calcular valores de pagamento e tempo total
+      // 3. Calcular duração total ANTES da verificação de conflito
+      const totalDurationMinutes = useManualPrice && manualPrice ? 
+        60 : // Valor padrão para atendimentos com preço diferenciado
+        calculatedPrices.services.reduce((total, service) => {
+          const serviceInfo = services.find(s => s.id === service.serviceId)
+          return total + (serviceInfo?.duration_minutes || 60) * service.quantity
+        }, 0)
+
+      // 4. Verificar conflito de horário (apenas para agendamentos confirmados com data/hora)
+      if (isAppointmentConfirmed && appointmentDate && appointmentTime) {
+        // Determinar qual prestador verificar: se tem parceiro selecionado, verifica o parceiro; senão, verifica o usuário
+        const prestadorToCheck = selectedPartner || user.id
+
+        const { data: conflictData, error: conflictError } = await supabase.rpc(
+          'check_schedule_conflict',
+          {
+            p_prestador_id: prestadorToCheck,
+            p_scheduled_date: appointmentDate,
+            p_scheduled_time: appointmentTime,
+            p_duration_minutes: totalDurationMinutes,
+            p_exclude_appointment_id: null
+          }
+        )
+
+        if (conflictError) throw conflictError
+
+        if (conflictData && conflictData.length > 0 && conflictData[0].has_conflict) {
+          const conflict = conflictData[0]
+          const prestadorName = selectedPartner ? 
+            (partners.find(p => p.id === selectedPartner)?.name || 'Parceiro') : 
+            'Você'
+          
+          alert(
+            `⚠️ Horário indisponível!\n\n` +
+            `${prestadorName} já tem agendamento neste horário:\n\n` +
+            `Cliente: ${conflict.conflict_client_name}\n` +
+            `Horário: ${conflict.conflict_time_start} - ${conflict.conflict_time_end}\n\n` +
+            `Escolha outro horário para evitar conflito.`
+          )
+          return
+        }
+      }
+
+      // 5. Calcular valores de pagamento
       
       // Calcular valor dos serviços (SEM taxa de deslocamento)
       const servicesOnlyValue = useManualPrice && manualPrice ? 
@@ -632,14 +675,6 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
       
       const downPaymentPaid = parseFloat(downPaymentAmount || '0')
 
-      // Calcular tempo total do atendimento (soma da duração de todos os serviços)
-      const totalDurationMinutes = useManualPrice && manualPrice ? 
-        60 : // Valor padrão para atendimentos com preço diferenciado
-        calculatedPrices.services.reduce((total, service) => {
-          const serviceInfo = services.find(s => s.id === service.serviceId)
-          return total + (serviceInfo?.duration_minutes || 60) * service.quantity
-        }, 0)
-
       // Determinar status do pagamento
       let finalPaymentStatus: 'pending' | 'paid' = 'pending'
       if (isAppointmentConfirmed) {
@@ -650,7 +685,7 @@ export function PriceCalculator({ user, initialDate, initialTime, initialStatus,
         }
       }
 
-      // 3. Criar agendamento completo usando RPC transacional
+      // 6. Criar agendamento completo usando RPC transacional
       const { data: result, error: createError } = await supabase.rpc(
         'create_appointment_with_services',
         {
