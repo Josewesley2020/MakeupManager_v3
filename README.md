@@ -14,11 +14,15 @@
 ## 🚀 Funcionalidades
 
 - **👥 Clientes** - Cadastro completo com histórico e WhatsApp
+- **� Parceiros** - Gestão de colaboradores com comissões
 - **📅 Agendamentos** - Calendário interativo com status e lembretes
-- **💰 Pagamentos** - Controle de entrada, saldo e status automático
-- **📊 Dashboard** - Métricas financeiras e performance
+- **📅 Vista Semanal** - Grade de horários multi-profissional
+- **💰 Pagamentos** - Controle de valores e status automático
+- **📊 Dashboard** - Métricas financeiras e performance (V1 e V2)
+- **💼 Gestão Financeira** - Receitas, comissões e lucro líquido
 - **⚙️ Configurações** - Serviços, categorias, áreas e preços
 - **📱 WhatsApp** - Orçamentos e lembretes direto pelo app
+- **🗄️ Arquivamento** - Histórico automático de agendamentos completos
 
 ---
 
@@ -102,10 +106,12 @@ npm run preview    # Testar build localmente
 
 - `profiles` - Usuários e perfis
 - `clients` - Clientes (isolados por usuário)
+- `partners` - Parceiros/colaboradores
 - `services` / `service_categories` - Catálogo de serviços
 - `service_areas` - Regiões com taxas de deslocamento
-- `appointments` - Agendamentos completos
-- `appointment_services` - Itens do agendamento
+- `appointments` - Agendamentos ativos
+- `appointment_services` - Itens do agendamento (many-to-many)
+- `appointments_history` - Histórico de agendamentos completos
 
 **Row Level Security (RLS):** ✅ Ativado em todas as tabelas
 
@@ -171,18 +177,42 @@ npm run build
 
 ## 🆕 Novidades da v3
 
-### Phase 0 - Simplificação (Mar 2026)
-- ✅ Removidas 11 dependências não utilizadas
-- ✅  Deletado código de regional pricing (obsoleto)
-- ✅ Hook customizado `usePaymentCalculator`
-- ✅ Imports React otimizados (React 18)
-- ✅ ~600 linhas de código removidas
-- ✅ Bundle otimizado: 460 kB (118 kB gzipped)
+### ✨ Features Principais Implementadas
 
-### Phase 1 & 2 - Performance (Dez 2025)
-- ✅ Dashboard 4x mais rápido (800ms → 200ms)
+**Sistema de Parceiros**
+- ✅ Gestão completa de colaboradores
+- ✅ Atribuição de parceiros a agendamentos
+- ✅ Cálculo automático de comissões
+- ✅ Métricas financeiras com lucro líquido
+
+**Vista Semanal Multi-Profissional**
+- ✅ Grade de horários por profissional (owner + parceiros)
+- ✅ Visualização de conflitos de agenda
+- ✅ Navegação semanal responsiva
+- ✅ Blocos de duração por appointment
+
+**Sistema de Arquivamento**
+- ✅ Movimentação automática de appointments completos
+- ✅ Histórico preservado para relatórios
+- ✅ Limpeza automática de appointments antigos
+- ✅ Performance otimizada (menos relacionamentos ativos)
+
+**Dashboard V2**
+- ✅ Redesign com métricas otimizadas
+- ✅ Performance 4x mais rápida (800ms → 200ms)
+- ✅ Alternável com Dashboard V1 via localStorage
+
+**Pagamentos V2 (Simplificados)**
+- ✅ Modelo simplificado sem down payment separado
+- ✅ Status automático (paid/pending) via trigger
+- ✅ Hook customizado `usePaymentCalculator`
+
+### 🚀 Otimizações de Performance
+- ✅ Removidas 11 dependências não utilizadas
 - ✅ RPC functions para queries consolidadas
 - ✅ Índices otimizados no banco
+- ✅ Bundle otimizado: 460 kB (118 kB gzipped)
+- ✅ ~600 linhas de código removidas
 
 ---
 
