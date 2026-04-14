@@ -8,8 +8,11 @@ MakeupManager is a professional makeup artist's management system built with Rea
 ### Core Components
 - **Authentication**: Supabase Auth with user-scoped data isolation
 - **Client Management**: Full CRUD with search/filtering and WhatsApp integration
+- **Partners Management**: Collaborator management with commission tracking
 - **Appointments System**: Complete scheduling with calendar view, status management, and payment tracking
-- **Financial Dashboard**: Revenue analysis, payment tracking, and performance metrics
+- **Weekly Schedule View**: Multi-professional time grid with conflict detection
+- **Financial Dashboard**: Revenue analysis, payment tracking, commission reports, and performance metrics
+- **Archiving System**: Automatic archival of completed appointments for performance optimization
 - **Service Configuration**: Hierarchical structure (categories → services → regional pricing)
 - **Price Calculator**: Complex pricing with regional overrides, custom prices, and travel fees
 - **Settings**: User profile and business configuration management
@@ -64,11 +67,20 @@ service_regional_prices (region-specific pricing overrides)
 ├── price (overrides base service price)
 └── created_at, updated_at
 
+-- Partners Management
+partners (collaborators/professionals)
+├── id (uuid, PK)
+├── user_id (FK to auth.users)
+├── name, phone
+├── notes (max 500 chars)
+└── created_at, updated_at
+
 -- Appointments System
-appointments (scheduling and payment tracking)
+appointments (active scheduling and payment tracking)
 ├── id (uuid, PK)
 ├── user_id (FK to auth.users)
 ├── client_id (FK to clients)
+├── partner_id (FK to partners, nullable - null = owner)
 ├── service_area_id (FK to service_areas)
 ├── scheduled_date, scheduled_time
 ├── status (pending, confirmed, completed, cancelled)
@@ -78,12 +90,10 @@ appointments (scheduling and payment tracking)
 ├── payment_total_appointment (total value)
 ├── payment_total_service (services only, no travel)
 ├── total_amount_paid (sum of all payments)
-├── payment_down_payment_expected
-├── payment_down_payment_paid
-├── total_received (legacy, use total_amount_paid)
-├── payment_status (paid, pending)
+├── commission_amount (decimal, default 0 - partner commission)
+├── payment_status (paid, pending - auto-updated by trigger)
 ├── total_duration_minutes
-├── whatsapp_sent, whatsapp_sent_at, whatsapp_message
+├── whatsapp_sent (boolean)
 ├── last_edited_at, edited_by (FK to auth.users)
 └── created_at, updated_at
 
@@ -94,6 +104,21 @@ appointment_services (appointment line items)
 ├── quantity (integer, min 1)
 ├── unit_price, total_price
 └── created_at
+
+appointments_history (archived completed appointments)
+├── id (uuid, PK - same as original appointment)
+├── user_id, client_id, partner_id
+├── scheduled_date, scheduled_time
+├── appointment_address, notes
+├── travel_fee
+├── payment_total_appointment
+├── payment_total_service
+├── total_amount_paid
+├── commission_amount
+├── total_duration_minutes
+├── services_summary (text - snapshot of services)
+├── completed_at (timestamp)
+└── archived_at (timestamp)
 ```
 
 ### Key Business Rules
@@ -102,7 +127,11 @@ appointment_services (appointment line items)
 - **Brazilian Localization**: Phone formatting, currency (BRL), and Portuguese UI text
 - **Appointment Reminders**: WhatsApp reminders automatically sent for appointments within 7 days
 - **Custom Pricing**: Support for manual price override excluding travel fees
-- **Payment Tracking**: Complete payment flow with down payment, remaining, and total paid tracking
+- **Payment Tracking**: Complete payment flow with automatic status updates (paid/pending)
+- **Partner Logic**: `partner_id = NULL` means owner performs service; otherwise assigned to partner
+- **Commission Tracking**: `commission_amount` tracks partner payout; Net Profit = total - commission
+- **Archiving System**: Appointments with status `completed` are auto-moved to `appointments_history` via trigger
+- **Data Cleanup**: Old `pending` (>15 days) and `cancelled` (>15 days) appointments can be cleaned via RPC function
 
 ## Critical Developer Workflows
 
@@ -229,26 +258,34 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 ### Core Architecture
 - `src/App.tsx` - Main app structure and routing
-- `src/components/Dashboard.tsx` - Main navigation and view switching
+- `src/components/Dashboard.tsx` - Main navigation and view switching (V1)
+- `src/components/DashboardV2.tsx` - Redesigned dashboard with optimized metrics
 - `src/lib/supabase.ts` - Database client and types
 
 ### Business Logic
 - `src/components/AppointmentsPage.tsx` - Appointments management with reminders
 - `src/components/CalendarPage.tsx` - Monthly calendar with appointment CRUD
-- `src/components/FinancialDashboard.tsx` - Financial metrics and reporting
+- `src/components/WeeklyScheduleView.tsx` - Multi-professional weekly schedule grid
+- `src/components/FinancialDashboard.tsx` - Financial metrics with commission tracking
 - `src/components/PriceCalculator.tsx` - Complex pricing calculations
 - `src/components/Settings.tsx` - Configuration management
 - `src/components/Clients.tsx` - Client CRUD operations
+- `src/components/Partners.tsx` - Partner management with commission tracking
+- `src/components/PartnersPage.tsx` - Partners page wrapper
+
+### Utilities & Hooks
+- `src/hooks/usePaymentCalculator.ts` - Payment calculation hook
+- `src/lib/PaymentService.ts` - Centralized payment logic
 
 ### Infrastructure
 - `vite.config.ts` - Build configuration with GitHub Pages setup
 - `package.json` - Scripts and dependencies
-- `database/migrations.sql` - Database schema and RLS policies
+- `database/schema-v2-optimized.sql` - Database schema and RLS policies
+- `database/ARCHIVING-SYSTEM.md` - Archiving system documentation
 - `.github/workflows/ci-deploy.yml` - CI/CD pipeline
 
 ### WhatsApp Integration
 - `src/components/WhatsAppButton.tsx` - Web-based messaging
-- `whatsapp-server.cjs` - Server-based automation
 - `src/components/PriceCalculator.tsx` - Budget messaging templates
 
 ## Development Best Practices
